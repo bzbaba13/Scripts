@@ -10,7 +10,7 @@ debug = False
 infile = None
 pattern = None
 no_case = None
-no_match = None
+reverse_match = False
 
 
 def usage():
@@ -41,7 +41,7 @@ for o, a in opts:
    elif o == "-i":
       no_case = True
    elif o == "-v":
-      no_match = True
+      reverse_match = True
    elif o == "-p":
       pattern = a
    else:
@@ -58,9 +58,15 @@ if pattern == None or infile == None:
 with open( infile, 'r' ) as f:
    for line in f:
       if no_case == True:
-         match = re.search ( pattern, line, flags=re.I )
+         if reverse_match == True:
+            match = not re.search ( pattern, line, flags=re.I )
+         else:
+            match = re.search ( pattern, line, flags=re.I )
       else:
-         match = re.search( pattern, line )
+         if reverse_match == True:
+            match = not re.search( pattern, line )
+         else:
+            match = re.search( pattern, line )
       if match:
          print line,
 
