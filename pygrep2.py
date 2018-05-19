@@ -47,26 +47,31 @@ for o, a in opts:
    else:
       assert False, "unhandled option"
 
-if debug == True:
-   print "Input file:", infile, " Pattern:", pattern
-
-if pattern == None or infile == None:
-   print "Please provide both pattern (-p) and input file (-f)."
-   usage()
-   sys.exit(2)
-
-with open( infile, 'r' ) as f:
-   for line in f:
-      if no_case == True:
-         if reverse_match == True:
-            match = not re.search ( pattern, line, flags=re.I )
+def main():
+   if debug == True:
+      print "Input file:", infile, " Pattern:", pattern
+   
+   if pattern == None or infile == None:
+      print "Please provide both pattern (-p) and input file (-f)."
+      usage()
+      sys.exit(2)
+   
+   with open( infile, 'r' ) as f:
+      for line in f:
+         if no_case == True:
+            if reverse_match == True:
+               match = not re.search ( pattern, line, flags=re.I )
+            else:
+               match = re.search ( pattern, line, flags=re.I )
          else:
-            match = re.search ( pattern, line, flags=re.I )
-      else:
-         if reverse_match == True:
-            match = not re.search( pattern, line )
-         else:
-            match = re.search( pattern, line )
-      if match:
-         print line,
+            if reverse_match == True:
+               match = not re.search( pattern, line )
+            else:
+               match = re.search( pattern, line )
+         if match:
+            print line,
+
+
+if __name__ == "__main__":
+   main()
 
