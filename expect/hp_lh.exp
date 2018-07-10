@@ -1,0 +1,26 @@
+#!/usr/bin/expect --
+#
+# Synopsis: This expect script will execute a single command in an HP
+#           StoreVirtual system via SSH.
+#
+# Usage: hp_lh.exp '{hostname}' '{password}' '{command}'
+#
+# Example (modified):
+# sort ~/blah | uniq | xargs -I'{}' \
+#   ./hp_lh.exp '{}' '{password}' 'getServerInfo' | grep iqn > iSCSI_Target_IDs
+# where blah is a list of short host name
+#
+# Author: Friendly half-blind Storage/Systems Administrator
+#
+# $Id: hp_lh.exp 10071 2016-11-08 00:42:39Z fma $
+#
+
+set timeout 2
+
+spawn ssh -l admin [lindex $argv 0] -p 16022 [lindex $argv 2]
+expect_after eof { exit 0 }
+
+## interact with SSH
+expect "yes/no" { send "yes\r" }
+expect "Pass" { send -- "[lindex $argv 1]\r" }
+expect "Password" { send -- "[lindex $argv 1]\r" }

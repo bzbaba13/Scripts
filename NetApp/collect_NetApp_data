@@ -1,0 +1,252 @@
+#!/bin/bash
+
+# In order to collect data from new controllers, touch empty files with the
+# controllers FQDN based on the naming convention of the existing controllers
+# and the script will automatically collect from the new controllers.
+
+#$Id: collect_NetApp_data 11005 2018-04-09 21:37:37Z fma $
+
+PATH=/bin:/usr/bin
+
+sys_cmd='sysconfig -av'
+sys_ptrn='sysconfig-av'
+ifc_cmd='ifconfig -a'
+ifc_ptrn='ifconfig-a'
+ifg_cmd='ifgrp status'
+ifg_ptrn='ifgrp_status'
+ssd_cmd='storage show disk -p'
+ssd_ptrn='storage_show_disk-p'
+acp_cmd='storage show acp'
+acp_ptrn='storage_show_acp'
+stor_fault_cmd='storage show fault -v'
+stor_fault_ptrn='storage_show_fault'
+retval=9
+SSHR='ssh -l root -a -x'
+PING='ping -q -c 1'
+sys_fl=''
+ifc_fl=''
+ifg_fl=''
+ssd_fl=''
+arch='all'
+
+
+# functions
+function test_by_ping ()
+{
+   $PING "$fqdn" 1>/dev/null 2>&1 ; retval="$?"
+}
+
+function process_7dot ()
+{
+   echo "$fqdn"
+   test_by_ping
+   if [[ "$retval" = '0' ]]
+   then
+      $SSHR "$fqdn" "$my_cmd" > "${my_ptrn}_${fqdn}" 2>&1
+   else
+      echo -e "\t${fqdn} not reachable via ICMP PING packet\n"
+   fi
+}
+
+function process_cdot ()
+{
+   echo "$cntr"
+   test_by_ping
+   if [[ "$retval" = '0' ]]
+   then
+      ssh -ax "$fqdn" "node run -node ${cntr} -command ${my_cmd}" > \
+"${my_ptrn}_${cntr}.<domain>" 2>&1
+   else
+      echo -e "\t${fqdn} not reachable via ICMP PING packet\n"
+   fi
+}
+
+function collect_7dot ()
+{
+   echo -e "\nGathering output of '${my_cmd}' from 7-mode controllers..."
+   for fqdn in $(echo "$my_fl" | grep -v irvnetappc | \
+awk -F '_' '{ print $NF }' | sort -V)
+   do
+      process_7dot
+   done
+}
+
+function collect_cdot ()
+{
+   echo -e "\nGathering output of '${my_cmd}' from C-mode controllers..."
+   fqdn='irvnetappc.<domain>'
+   for cntr in $(echo "$my_fl" | grep irvnetappc | awk -F '_' '{ print $NF }' | \
+awk -F '.' '{ print $1 }' | sort -V)
+   do
+      process_cdot
+   done
+}
+
+# 7-mode
+function get_7dot ()
+{
+   # sysconfig -av
+   my_cmd="$sys_cmd"
+   my_fl="$sys_fl"
+   my_ptrn="$sys_ptrn"
+   collect_7dot
+   
+   # ifconfig -a
+   my_cmd="$ifc_cmd"
+   my_fl="$ifc_fl"
+   my_ptrn="$ifc_ptrn"
+   collect_7dot
+   
+   # ifgrp status
+   my_cmd="$ifg_cmd"
+   my_fl="$ifg_fl"
+   my_ptrn="$ifg_ptrn"
+   collect_7dot
+   
+   # storage show disk -p
+   my_cmd="$ssd_cmd"
+   my_fl="$ssd_fl"
+   my_ptrn="$ssd_ptrn"
+   collect_7dot
+   
+   # storage show acp
+   my_cmd="$acp_cmd"
+   my_fl="$acp_fl"
+   my_ptrn="$acp_ptrn"
+   collect_7dot
+
+   # storage show fault -v
+   my_cmd="$stor_fault_cmd"
+   my_fl="$stor_fault_fl"
+   my_ptrn="$stor_fault_ptrn"
+   collect_7dot
+}
+
+# Cluster-mode
+function get_cdot ()
+{
+   # sysconfig -av
+   my_cmd="$sys_cmd"
+   my_fl="$sys_fl"
+   my_ptrn="$sys_ptrn"
+   collect_cdot
+   
+   # ifconfig -a
+   my_cmd="$ifc_cmd"
+   my_fl="$ifc_fl"
+   my_ptrn="$ifc_ptrn"
+   collect_cdot
+   
+   # ifgrp status
+   my_cmd="$ifg_cmd"
+   my_fl="$ifg_fl"
+   my_ptrn="$ifg_ptrn"
+   collect_cdot
+   
+   # storage show disk -p
+   my_cmd="$ssd_cmd"
+   my_fl="$ssd_fl"
+   my_ptrn="$ssd_ptrn"
+   collect_cdot
+   
+   # storage show acp
+   my_cmd="$acp_cmd"
+   my_fl="$acp_fl"
+   my_ptrn="$acp_ptrn"
+   collect_cdot
+
+   # storage show fault -v
+   my_cmd="$stor_fault_cmd"
+   my_fl="$stor_fault_fl"
+   my_ptrn="$stor_fault_ptrn"
+   collect_cdot
+}
+
+# gather file lists
+function gather_file_lists ()
+{
+sys_fl=$(ls -1 ${sys_ptrn}* 2>/dev/null)
+ifc_fl=$(ls -1 ${ifc_ptrn}* 2>/dev/null)
+ifg_fl=$(ls -1 ${ifg_ptrn}* 2>/dev/null)
+ssd_fl=$(ls -1 ${ssd_ptrn}* 2>/dev/null)
+acp_fl=$(ls -1 ${acp_ptrn}* 2>/dev/null)
+stor_fault_fl=$(ls -1 ${stor_fault_ptrn}* 2>/dev/null)
+if [[ "$sys_fl"x == 'x' ]] ; then
+   echo -e "\nNo ${sys_ptrn}* files available.\n"
+   exit 1
+elif [[ "$ifc_fl"x == 'x' ]] ; then
+   echo -e "\nNo ${ifc_ptrn}* files available.\n"
+   exit 1
+elif [[ "$ifg_fl"x == 'x' ]] ; then
+   echo -e "\nNo ${ifg_ptrn}* files available.\n"
+   exit 1
+elif [[ "$ssd_fl"x == 'x' ]] ; then
+   echo -e "\nNo ${ssd_ptrn}* files available.\n"
+   exit 1
+elif [[ "$acp_fl"x == 'x' ]] ; then
+   echo -e "\nNo ${acp_ptrn}* files available.\n"
+   exit 1
+elif [[ "$stor_fault_fl"x == 'x' ]] ; then
+   echo -e "\nNo ${stor_fault_ptrn}* files available.\n"
+   exit 1
+fi
+}
+
+# usage/help
+usage()
+{
+   echo -e "\n${0} [-a (7dot|cdot)] [-h]"
+   echo -e "\nwhere:"
+   echo -e "\t-a\tprocess either 7DOT or CDOT HA-pairs"
+   echo -e "\t-h\tthis help\n"
+}
+
+
+# parse options
+while getopts ":a:h" opt ; do
+   case $opt in
+      a)
+         arch=$OPTARG
+         ;;
+      h)
+         usage
+         exit 2
+         ;;
+      \?)
+         echo "Invalid option: -${OPTARG}" >&2
+         usage
+         exit 1
+         ;;
+      :)
+         echo "Option -$OPTARG requires an argument." >&2
+         usage
+         exit 1
+         ;;
+      *)
+         usage
+         exit 2
+         ;;
+   esac
+done
+
+
+# main logic
+gather_file_lists
+case $arch in
+   'all')
+      get_7dot
+      get_cdot
+      ;;
+   '7dot')
+      get_7dot
+      ;;
+   'cdot')
+      get_cdot
+      ;;
+   *)
+      echo -e "\nCRITICAL:  Invalid OS architecture specified."
+      usage
+      exit 1
+      ;;
+esac
+

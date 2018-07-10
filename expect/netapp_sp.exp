@@ -1,0 +1,41 @@
+#!/usr/bin/expect --
+#
+# Synopsis: This expect script will execute a single command in the SP of a
+#           NetApp storage system via SSH.
+#
+# Usage: netapp_sp.exp '{hostname}' '{username}' '{password}' '{command}'
+#
+# Example: with password temporarily stored in the 'mypw' file of $HOME...
+#	CDOT
+#	[fma@fma3.np.wc1.yellowpages.com:~/svn/sysadmin/storage/netapp]
+#	$ ls -1 sysconfig-av_* | awk -F'_' '{ print $NF }' | sort -V | \
+#	sed 's/\.[we][cv]1/-sp&/' | grep irvnetappc | \
+#	xargs -I'{}' ../../tools/netapp_sp.exp '{}' 'admin' $(<~/mypw) 'sp uptime' | \
+#	grep -A 1 'sp\ uptime'
+#
+#	7DOT
+#	[fma@fma3.np.wc1.yellowpages.com:~/svn/sysadmin/storage/netapp]
+#	$ ls -1 sysconfig-av_* | awk -F'_' '{ print $NF }' | sort -V | \
+#	sed 's/\.[we][cv]1/-sp&/' | grep -v irvnetappc | \
+#	xargs -I'{}' ../../tools/netapp_sp.exp '{}' 'naroot' $(<~/mypw) 'sp uptime' | \
+#	grep -A 1 'sp\ uptime'
+#
+#
+# Author: Friendly half-blind Lead Storage/Systems Administrator
+#
+# $Id: netapp_sp.exp 10071 2016-11-08 00:42:39Z fma $
+#
+
+set timeout 2
+
+spawn ssh -axl [lindex $argv 1] [lindex $argv 0]
+expect_after eof { exit 0 }
+
+expect "yes/no" { send "yes\r" }
+expect "Pass" { send -- "[lindex $argv 2]\r" }
+expect "pass" { send -- "[lindex $argv 2]\r" }
+expect "Password" { send -- "[lindex $argv 2]\r" }
+expect "password" { send -- "[lindex $argv 2]\r" }
+expect "SP " { send -- "[lindex $argv 3]\r" }
+expect "SP " { send -- "exit\r" }
+

@@ -1,0 +1,458 @@
+#!/bin/bash
+
+# == Synopsis
+#
+# This script will [eventually] create EVS on HDS storage systems via SSC
+# binary provided by HDS and then create/update OpsDB entry in order to allow
+# OpsDB client to populate storage information based on /etc/fstab file.
+#
+# This script works on the assumption that the nventory client software is
+# always installed and available in order for opsdb_node_tool.rb to function.
+#
+# Ash4060-1-C1:$ help evs
+# Command:     evs
+# Description: EVS management
+# User level:  User
+# Needs:       Admin Service
+# Native to:
+# Syntax:      evs
+#         create [-l <label>] -i [<ipaddr/prefix> | <ipaddr> -m <mask>] -p <port> [-n <dst-nodeid>][-w <witness-for>]
+#
+# $ ./opsdb_node_tool.rb -h
+# Usage: svn/sysadmin/tools/opsdb_node_tool.rb [options]
+# !!USE WITH CAUTION -> NEVER THOROUGHLY TESTED!!
+# Add an entry to opsdb:
+#     -t                               Create on the opsdb test host only (if it's currently working).
+#     -d                               Run in debug mode.
+#     -n NODENAME[,"HW_PROFILE_NAME"]  Add a host to opsdb.
+#                                      Without HW_PROFILE_NAME a list of hw profiles is provided.
+#                                      Indicate an existing profile as follows: HOSTNAME,"HP C7000 Blade Enclosure".
+#     -i NODENAME,DEVICE,MACADDR       Add an interface to an existing node in opsdb (ex. blah.<domain>,eth0,00:00:00:00:00).
+#     -h                               Show this message.
+#
+# == Author
+# Friendly half-blind Lead Storage/Systems Administrator with smiles
+#
+# $Id: evs2opsdb 10370 2017-03-02 02:19:49Z fma $
+
+PATH=/bin:/usr/bin
+
+retval=9
+evs_name='no_evs'
+evs_fqdn='no_evs'
+hw_profile='no_hw_profile'
+opsdb_entry='no_opsdb_entry'
+CONTACTS='<contacts>'
+mytest='N'
+NV_BIN=/usr/bin/nv
+SSC_BIN=<path>/ssc
+svr_opt=''
+loc='xyz'
+ip_site='0.0'
+ip_addr='0.0.0.0'
+subnet_mask='0.0.0.0'
+hnas_node='no_hnas_node'
+node_id='no_node_id'
+adm_node='no_adm_node'
+agg_link='no_agg_link'
+HASH_FILE=~/.hash_file_4_evs
+evs_err='no_evs_err'
+opsdb_err='no_opsdb_err'
+EVS_LIST_ERR='evs list: Could not find the specified EVS'
+read_reply='n'
+network_type='no_network_type'
+cluster_type='no_cluster_type'
+
+
+# functions
+function check_ip ()
+{
+   case $ip_addr in
+      10.1.14[4567].*)
+         agg_link='ag1'
+         subnet_mask='255.255.252.0'
+         network_type='routed'
+         ;;
+      10.3.14[4567].*)
+         agg_link='ag1'
+         subnet_mask='255.255.252.0'
+         network_type='routed'
+         ;;
+      192.168.168.*)
+         agg_link='ag2'
+         subnet_mask='255.255.255.0'
+         network_type='not routed'
+         ;;
+      *)
+         echo -e "\nCRITICAL:  Specified IP address is not in the format of 10.(1|3).14[4567].x or 192.168.168.y format."
+         show_help
+         exit 1
+         ;;
+   esac
+}
+
+function identify_dc ()
+{
+   loc=$(echo "$evs_name" | cut -b 1-3)
+   case $loc in
+      'ash')
+         dc='ev1'
+         ip_site='10.3'
+         ;;
+      'irv')
+         dc='wc1'
+         ip_site='10.1'
+         ;;
+      *)
+         echo -e "\nCRITICAL:  EVS name does not start with either 'irv' or 'ash'."
+         show_help
+         exit 1
+         ;;
+   esac
+   evs_fqdn="${evs_name}.${dc}.yellowpages.com"
+}
+
+function verify_opsdb_entry ()
+{
+   opsdb_entry=$($NV_BIN ${svr_opt} --get name="$evs_fqdn" 2>&1)
+}
+
+function create_opsdb_entry ()
+{
+#   opsdb_err='no_opsdb_error'
+#   if [[ "$mytest" == 'N' ]] ; then
+#      opsdb_err=$($TOOLS_REPO/opsdb_node_tool.rb -n "${evs_fqdn},\"${hw_profile}\"" 2>&1)
+      /opt/local/hds_utils/opsdb_node_tool.rb -n "${evs_fqdn},\"${hw_profile}\"" 
+#   else
+#      opsdb_err=$($TOOLS_REPO/opsdb_node_tool.rb -t -n "${evs_fqdn},\"${hw_profile}\"" 2>&1)
+#   fi
+}
+
+function update_opsdb_entry ()
+{
+#   opsdb_err='no_opsdb_error'
+#   opsdb_err=$($NV_BIN "$svr_opt" --get name="$evs_fqdn" --yes --addtonodegroup "hds_evs,${dc}" 2>&1)
+   echo "Adding OpsDB entry to nodegroups (this takes a little time..."
+   $NV_BIN "$svr_opt" --get name="$evs_fqdn" --yes --addtonodegroup "hds_evs,${dc}"
+#   if [[ "$opsdb_err" == 'Command completed successfully' ]] ; then
+#      echo -e "\tCompleted adding to node groups of hds_evs,${dc}."
+#   else
+#      echo -e "\tFAILED to add ${evs_fqdn} to node groups of hds_evs,${dc}."
+#   fi
+#   opsdb_err='no_opsdb_error'
+#   opsdb_err=$($NV_BIN "$svr_opt" --get name="$evs_fqdn" --yes --set contact="$CONTACTS" 2>&1)
+   echo "Setting contact of OpsDB entry..."
+   $NV_BIN "$svr_opt" --get name="$evs_fqdn" --yes --set contact="$CONTACTS"
+#   if [[ "$opsdb_err" == 'Command completed successfully' ]] ; then
+#      echo -e "\tCompleted setting contact to ${CONTACTS}."
+#   else
+#      echo -e "\tFAILED to set contact to ${CONTACTS}."
+#   fi
+#   opsdb_err='no_opsdb_error'
+#   opsdb_err=$($NV_BIN "$svr_opt" --get name="$evs_fqdn" --yes --set hardware_profile[name]="$hw_profile" 2>&1)
+   echo "Setting hardware profile..."
+   $NV_BIN "$svr_opt" --get name="$evs_fqdn" --yes --set hardware_profile[name]="$hw_profile"
+#   if [[ "$opsdb_err" == 'Command completed successfully' ]] ; then
+#      echo -e "\tCompleted setting hardware profile to ${hw_profile}."
+#   else
+#      echo -e "\tFAILED to set hardware profile to ${hw_profile}."
+#   fi
+#   opsdb_err='no_opsdb_error'
+#   opsdb_err=$($NV_BIN "$svr_opt" --get name="$evs_fqdn" --yes --set name_aliases[name]="$evs_name" 2>&1)
+   echo "Setting alias..."
+   $NV_BIN "$svr_opt" --get name="$evs_fqdn" --yes --set name_aliases[name]="$evs_name"
+#   if [[ "$opsdb_err" =~ 'Command completed' ]] ; then
+#      echo -e "\tCompleted setting name_aliases to ${evs_name}."
+#   else
+#      echo -e "\tFAILED to set name aliases to ${evs_name}."
+#   fi
+#   opsdb_err='no_opsdb_error'
+#   opsdb_err=$($NV_BIN "$svr_opt" --get name="$evs_fqdn" --yes --set status=inservice 2>&1)
+   echo "Setting status..."
+   $NV_BIN "$svr_opt" --get name="$evs_fqdn" --yes --set status=inservice
+#   if [[ "$opsdb_err" =~ 'Command completed' ]] ; then
+#      echo -e "\tCompleted setting status to inservice."
+#   else
+#      echo -e "\tFAILED to set status to inservice."
+#   fi
+}
+
+function display_opsdb_entry ()
+{
+   echo -e "\nOpsDB entry...\n= = = = = = = ="
+   $NV_BIN "$svr_opt" --get name="$evs_fqdn" \
+     --fields contact,node_groups[name],hardware_profile[name],name_aliases[name]
+}
+
+function verify_hw_profile ()
+{
+   case $hw_profile in
+      'HDS HNAS 4100')
+         retval=0
+         ;;
+      'HDS HNAS 4060')
+         retval=0
+         ;;
+      *)
+         echo -e "\nCRITICAL:  No matching hardware profile specified."
+         show_help
+         exit 1
+         ;;
+   esac
+}
+
+function setup_hnas_id_node ()
+{
+   case $hnas_node in
+      irv4100-c1-1)
+         node_id='1'
+         adm_node='irv4100-adminevs.<domain>'
+         cluster_type='prod'
+         hw_profile='HDS HNAS 4100'
+         ;;
+      irv4100-c1-2)
+         node_id='2'
+         adm_node='irv4100-adminevs.<domain>'
+         cluster_type='prod'
+         hw_profile='HDS HNAS 4100'
+         ;;
+      irv4060-c1-1)
+         node_id='1'
+         adm_node='irv4060-adminevs.<domain>'
+         cluster_type='non-prod'
+         hw_profile='HDS HNAS 4060'
+         ;;
+      irv4060-c1-2)
+         node_id='2'
+         adm_node='irv4060-adminevs.<domain>'
+         cluster_type='non-prod'
+         hw_profile='HDS HNAS 4060'
+         ;;
+      ash4060-1-c1)
+         node_id='1'
+         adm_node='ash4060-adminevs.<domain>'
+         cluster_type='prod'
+         hw_profile='HDS HNAS 4060'
+         ;;
+      ash4060-2-c1)
+         node_id='2'
+         adm_node='ash4060-adminevs.<domain>'
+         cluster_type='prod'
+         hw_profile='HDS HNAS 4060'
+         ;;
+      ash4060-np-c2-1)
+         node_id='1'
+         adm_node='ash4060np-adminevs.<domain>'
+         cluster_type='non-prod'
+         hw_profile='HDS HNAS 4060'
+         ;;
+      ash4060-np-c2-2)
+         node_id='2'
+         adm_node='ash4060np-adminevs.<domain>'
+         cluster_type='non-prod'
+         hw_profile='HDS HNAS 4060'
+         ;;
+      *)
+         echo -e "\nCRITICAL:  Specified HNAS node is not on the list of available HNAS nodes."
+         show_help
+         exit 1
+         ;;
+   esac
+}
+
+function verify_evs ()
+{
+   retval=9
+   evs_err='no_evs_err'
+   evs_err=$($SSC_BIN -u <username> -E "$HASH_FILE" "$adm_node" \
+     evs list -e "$evs_name" 2>&1)
+   retval=$?
+}
+
+function create_evs () 
+{
+   retval=9
+   evs_err='no_evs_err'
+   evs_err=$($SSC_BIN -u <username> -E "$HASH_FILE" "$adm_node" \
+     evs create -l "$evs_name" -i "$ip_addr" -m "$subnet_mask" -p "$agg_link" \
+     -n "$node_id" 2>&1)
+   retval=$?
+}
+
+function display_evs ()
+{
+   $SSC_BIN -u <username> -E "$HASH_FILE" "$adm_node" evs list -e "$evs_name"
+}
+
+set_preferred_node ()
+{
+   retval=9
+
+   msg=$( $SSC_BIN -u <username> -E "$HASH_FILE" "$adm_node" \
+"evsmap set -e ${evs_name} -n ${node_id}" 2>&1 )
+
+   retval=$?
+}
+
+function evs_routine ()
+{
+   verify_evs
+   if [[ $retval != 0 && $evs_err == $EVS_LIST_ERR ]] ; then
+      echo -e "\nReady to perform the following tasks:"
+      echo -e "\tCreate EVS named ${evs_name} in ${hnas_node} (${cluster_type}) cluster"
+      echo -e "\twith ${ip_addr}/${subnet_mask} (${network_type}) using ${agg_link} link"
+      echo -e "\twith ${hnas_node} as preferred node in ${dc}.\n"
+      read_reply='n'
+      read -p "Do you want to proceed? (y/N) " -t 18 read_reply
+      if [[ $(echo "$read_reply" | tr [:upper:] [:lower:]) != 'y' || $? -gt 128 ]] ; then
+         echo "Skipping EVS creation."
+      else
+         echo -e "Creating EVS vis SSC..."
+         create_evs
+         if [[ $retval != 0 ]] ; then
+            echo -e "\nCRITICAL:  EVS creation failed with the following error..."
+            echo -e "${evs_err}\n"
+            exit 1
+         else
+            echo -e "\tEVS creation completed."
+            echo -e "Verifying EVS..."
+            verify_evs
+            if [[ $retval != 0 && $evs_err == $EVS_LIST_ERR ]] ; then
+               echo -e "\nCRITICAL:  EVS verification failed with error..."
+               echo -e "${evs_err}\n"
+               exit 1
+            else
+               echo -e "\tEVS verification completed."
+            fi
+            echo -e "Setting preferred node ${hnas_node} with ID ${node_id} for EVS ${evs_name}..."
+            set_preferred_node
+            if [[ $retval -eq 0 ]] ; then
+               echo -e "\tPreferred node ${hnas_node} with ID ${node_id} set for ${evs_name}."
+            else
+               echo -e "\nWARNING: Unable to set preferred node ${hnas_node} with ID \
+${node_id} for ${evs_name}."
+
+               echo -e "Please investigate.\n$msg"
+            fi
+         fi
+      fi
+   else
+      echo -e "\nCRITICAL:  Discovered ${evs_name} on ${hnas_node} cluster..."
+      echo "$evs_err"
+      echo -e "\n\t\tEVS named ${evs_name} ***NOT*** created.\n"
+   fi
+}
+
+function opsdb_routine ()
+{
+   verify_opsdb_entry
+   if [[ "$opsdb_entry" =~ 'No matching objects' ]] ; then
+      echo -e "\nReady to perform the following tasks:"
+      echo -e "\tCreate OpsDB entry of ${evs_fqdn}"
+      echo -e "\tto be added to node groups: hds_evs,${dc}"
+      echo -e "\twith contact: ${CONTACTS}"
+      echo -e "\t     hardware profile: ${hw_profile}"
+      echo -e "\t     alias: ${evs_name}\n"
+      read_reply='n'
+      read -p "Do you want to proceed? (y/N) " -t 18 read_reply
+      if [[ $(echo "$read_reply" | tr [:upper:] [:lower:]) != 'y' || $? -gt 128 ]] ; then
+         echo "Skipping OpsDB entry creation."
+      else
+         echo "Creating OpsDB entry for ${evs_fqdn}.  Please enter your SSO password when prompted."
+         create_opsdb_entry
+#         if [[ "$opsdb_err" =~ 'Command completed' || "$opsdb_err" =~ 'ADDED' ]] ; then
+#            echo -e "\t${opsdb_err}."
+            echo "Verifying OpsDB entry for ${evs_fqdn}..."
+            verify_opsdb_entry
+            if [[ "$opsdb_entry" =~ 'No matching objects' ]] ; then
+               echo -e "\nCRITICAL:  OpsDB entry creation/verification for \
+${evs_fqdn} failed to complete."
+               echo -e "\t${opsdb_entry}"
+               exit 1
+            else
+               echo -e "\tOpsDB entry of ${opsdb_entry} verified successfully."
+               echo "Updating OpsDB entry.  Please enter your SSO password when prompted."
+               update_opsdb_entry
+               display_opsdb_entry
+            fi
+#         else
+#            echo -e "\nCRITICAL:  OpsDB entry creation did not complete with the following output:"
+#            echo "$opsdb_err"
+#            exit 1
+#         fi
+      fi
+   else
+      echo -e "\nCRITICAL:  ${opsdb_entry} already exists in OpsDB."
+      display_opsdb_entry
+   fi
+}
+
+function show_help ()
+{
+   echo "${0} -n {evs_name} -i {IP_addr} -d {HNAS_node}"
+   echo
+   echo "where:"
+   echo -e "\t-n\tevs_name is in the form of:"
+   echo -e "\t\t  ashevs-{purpose} for Ashburn, VA or irvevs-{purpose} for Irvine, CA"
+   echo -e "\t\t  e.g., ashevs-dev99, irvevs-dev99, etc."
+   echo -e "\t-i\tIP address of EVS, e.g., 10.1.x.y or 10.3.x.y"
+   echo -e "\t-d\tHNAS node in (case sensitive):"
+   echo -e "\t\t  Irvine, CA: irv4060-c1-1 or irv4060-c1-2 (non-prod)"
+   echo -e "\t\t              irv4100-c1-1 or irv4100-c1-2 (prod)"
+   echo -e "\t\t  Ashburn, VA: ash4060-np-c2-1 or ash4060-np-c2-2 (non-prod)"
+   echo -e "\t\t               ash4060-1-c1 or ash4060-2-c1 (prod)"
+#   echo -e "\t-t\tto use non-prod OpsDB (*fail* due to failure of opsdb_node_tool.rb)"
+   echo
+}
+
+
+# parse options
+while getopts ":d:hi:n:t" opt ; do
+   case $opt in
+      n)
+         evs_name="$OPTARG"
+         ;;
+      h)
+         show_help
+         exit 2
+         ;;
+      i)
+         ip_addr="$OPTARG"
+         ;;
+      d)
+         hnas_node="$OPTARG"
+         ;;
+      t)
+         mytest='Y'
+         svr_opt='--server stage-opsdb.int.yp.com'
+         ;;
+      \?)
+         echo "Invalid option: -${OPTARG}" >&2
+         show_help
+         exit 1
+         ;;
+      :)
+         echo "Option -$OPTARG requires an argument." >&2
+         show_help
+         exit 1
+         ;;
+   esac
+done
+
+
+# main logic
+if [[ $evs_name == 'no_evs' || $hnas_node == 'no_hnas_node' || \
+  $ip_addr == '0.0.0.0' ]] ; then
+   echo -e "\nMissing either EVS name, IP address, or HNAS node."
+   show_help
+   exit 1
+else
+   echo -e "\nValidating entered information..."
+   check_ip
+   setup_hnas_id_node
+   identify_dc
+   verify_hw_profile
+   echo -e "\tProvided information has been validated."
+   evs_routine
+   opsdb_routine
+fi

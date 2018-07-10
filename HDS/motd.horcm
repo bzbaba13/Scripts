@@ -1,0 +1,7 @@
+#!/bin/bash
+
+# $Id: motd.horcm 10089 2016-11-11 21:10:42Z fma $
+
+PATH=/bin:/usr/bin:/HORCM/usr/bin
+
+echo -e "HORCM/CCI/RAIDCOM Instance: $(ls -1 /etc/horcm*.conf | sort -rV | head -1 | sed -e 's/^.*horcm//' -e 's/\.conf//')\n"

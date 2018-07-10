@@ -1,0 +1,207 @@
+#!/bin/bash
+
+# == Synopsis
+#
+# This is a BASH script to fetch data of a file system and all the virtual
+# volume(s) within the file system and provide a summary of capacity allocated
+# and consumed.
+#
+#
+# == Author
+# Friendly half-blind Lead Storage/Systems Administrator with smiles
+#
+# $Id: 1fs_quota 10551 2017-05-16 20:02:51Z fma $
+
+PATH=/bin:/usr/bin
+
+retval=9
+evs_name='no_evs'
+evs_id=99
+evs_fqdn='no_evs'
+SSC_BIN=<path>/ssc
+HASH_FILE=~/.hash_file_4_evs
+hnas_node='no_hnas_node'
+adm_node='no_adm_node'
+opsdb_err='no_opsdb_err'
+EVS_LIST_ERR='evs list: Could not find the specified EVS'
+read_reply='n'
+msg=''
+fs_size=0
+virtual_volumes='n'
+fs_exist='n'
+etc_path='/opt/local/hds_utils/etc'
+
+
+
+# functions
+identify_admin_node ()
+{
+   case $hnas_node in
+      irv4100)
+         adm_node='irv4100-adminevs.<domain>'
+         cluster_type='prod'
+         ;;
+      irv4060)
+         adm_node='irv4060-adminevs.<domain>'
+         cluster_type='non-prod'
+         ;;
+      ash4060)
+         adm_node='ash4060-adminevs.<domain>'
+         cluster_type='prod'
+         ;;
+      ash4060np)
+         adm_node='ash4060np-adminevs.<domain>'
+         cluster_type='non-prod'
+         ;;
+      *)
+         echo -e "CRITICAL: HNAS node is not on the list of available HNAS nodes."
+         show_help
+         exit 1
+         ;;
+   esac
+}
+
+request_fs_name ()
+{
+   echo
+   read -p "Please provide file system name followed by <Enter>: " fs_name
+}
+
+fetch_all_fs ()
+{
+   msg=$( $SSC_BIN -u <username> -E "$HASH_FILE" "$adm_node" \
+'filesystem-list' 2>&1 )
+
+   echo "$msg" | sed '/Tier/ d'
+}
+
+check_fs_name ()
+{
+   retval=9
+   msg=$( $SSC_BIN -u <username> -E "$HASH_FILE" "$adm_node" \
+"filesystem-list ${fs_name}" 2>&1 )
+
+   retval=$?
+}
+
+fetch_quota ()
+{
+   retval=0
+   msg=$( $SSC_BIN -u <username> -E "$HASH_FILE" "$adm_node" \
+"vn ${evs_name} quota list ${fs_name}" 2>&1 )
+
+   retval=$?
+}
+
+fetch_snapshot ()
+{
+   retval=0
+   msg=$( $SSC_BIN -u <username> -E "$HASH_FILE" "$adm_node" \
+"vn ${evs_name} snapshot-list --file-system ${fs_name}" 2>&1 )
+
+   retval=$?
+}
+
+show_help ()
+{
+   echo "${0} -d {HNAS_node} [-t]"
+   echo
+   echo "where:"
+   echo -e "\t-d\tHNAS node in (case sensitive):"
+   echo -e "\t\t  Irvine, CA: irv4060 (non-prod)"
+   echo -e "\t\t              irv4100 (prod)"
+   echo -e "\t\t  Ashburn, VA: ash4060np (non-prod)"
+   echo -e "\t\t               ash4060 (prod)"
+   echo -e "\t-t\tUse AWK scripts in $HOME/etc/ instead of ${etc_path}."
+   echo
+}
+
+
+# parse options
+while getopts ":d:ht" opt ; do
+   case $opt in
+      d)
+         hnas_node="$OPTARG"
+         ;;
+      h)
+         show_help
+         exit 2
+         ;;
+      t)
+         etc_path=$HOME/etc
+         ;;
+      \?)
+         echo "Invalid option: -${OPTARG}" >&2
+         show_help
+         exit 1
+         ;;
+      :)
+         echo "Option -$OPTARG requires an argument." >&2
+         show_help
+         exit 1
+         ;;
+      *)
+         show_help
+         exit 2
+         ;;
+   esac
+done
+
+
+# main logic
+if [[ -r $HASH_FILE && -x $SSC_BIN && -d $etc_path ]] ; then
+   identify_admin_node
+   echo -e "\nBelow is a list of all existing file system(s) on ${hnas_node}:"
+   fetch_all_fs
+   request_fs_name
+   if [[ x$fs_name == x ]] ; then
+      echo -e "\nNo file system name was entered.  Below is a list of existing \
+file system(s):"
+      fetch_all_fs
+      request_fs_name
+   fi
+   if [[ x$fs_name == x ]] ; then
+      echo -e "\nStill no file system name entered.  Aborting.\n"
+      exit 1
+   fi
+   check_fs_name
+   if [[ $retval -ne 0 ]] ; then
+      echo -e "\nProvided file systems name cannot be found.  Please try again..."
+      request_fs_name
+      check_fs_name
+      if [[ $retval -ne 0 ]] ; then
+         echo -e "\nStill cannot find provided file system.  Aborting.\n"
+         exit 1
+      fi
+   fi
+   evs_name=$(echo "$msg" | grep Mount | awk '{ print $5 }')
+   echo -e "\nInformation on file system..."
+   echo -e "$msg\n"
+   echo -e "\nInformation on quota..."
+   fetch_quota
+   if [[ $retval -eq 0 ]] ; then
+      if [[ $msg =~ 'No quotas' ]] ; then
+         echo -e "\t$msg\n"
+      else
+         echo "$msg" | sed -e '/Type/ d' -e '/Warning/,+8 d' | \
+awk -f $etc_path/1fs_quota_tot.awk
+      fi
+   else
+      echo -e "\nFailed to retrieve quota information for ${fs_name}.\n"
+      echo "$msg"
+      exit 1
+   fi
+   echo -e "\nInformation on snapshot..."
+   fetch_snapshot
+   if [[ $retval -eq 0 ]] ; then
+      if [[ $msg =~ 'No snapshots' ]] ; then
+         echo -e "\t$(echo "$msg" | sed '/snapshot-list:/ d')\n"
+      else
+         echo "$msg" | sed -e '/snapshot-list:/,+1 d' \
+-e '/block-based\ snapshots/ d' | awk -f $etc_path/1fs_snapshot_tot.awk
+      fi
+   fi
+else
+   echo -e "\nCRITICAL: Either ${HASH_FILE}, ${SSC_BIN}, or ${etc_path}/ is not available."
+   exit 1
+fi

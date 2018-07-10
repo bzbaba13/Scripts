@@ -1,0 +1,48 @@
+#!/bin/bash
+
+#$Id: daily_dfm_reports_c-mode 10781 2017-09-27 22:03:28Z fma $
+
+PATH=/bin:/usr/bin
+
+# variables
+rpt_path='/var/www/html/dfm_reports'
+logrotate_bin=/usr/sbin/logrotate
+
+# rotate existing files
+if [[ $1 != '-d' ]] ; then
+   if [[ -x $logrotate_bin ]] ; then
+      $logrotate_bin -f /root/etc/daily_reports.logrotate >/dev/null 2>&1
+      EXITVALUE=$?
+      if [ $EXITVALUE != 0 ] ; then
+         logger -t logrotate "ALERT - $0 exited abnormally with [$EXITVALUE]"
+         exit $EXITVALUE
+      fi
+   else
+      echo "The logrotate binary is not in /usr/sbin or executable."
+      exit 1
+   fi
+fi
+
+# begin generating reports
+echo 'All Controllers Report' > "$rpt_path"/controllers.txt
+dt_stamp=`date`
+echo -e "Generated on ${dt_stamp}\n" >> "$rpt_path"/controllers.txt
+dfm report view controllers | cut -b 11- >> "$rpt_path"/controllers.txt
+
+echo 'All Controllers w/ Data ONTAP Version Report (by OS Version)' \
+   > "$rpt_path"/controllers-releases.txt
+dt_stamp=`date`
+echo -e "Generated on ${dt_stamp}\n" >> "$rpt_path"/controllers-releases.txt
+dfm report view -s 'OS Version' controllers-releases \
+   | cut -b 11- >> "$rpt_path"/controllers-releases.txt
+
+echo 'Volumes Report' > "$rpt_path"/volumes.txt
+dt_stamp=`date`
+echo -e "Generated on ${dt_stamp}\n" >> "$rpt_path"/volumes.txt
+dfm report view volumes | cut -b 11- >> "$rpt_path"/volumes.txt
+
+echo 'Top 30 Volume Utilization Report' > "$rpt_path"/volume-top-utilization.txt
+dt_stamp=`date`
+echo -e "Generated on ${dt_stamp}\n" >> "$rpt_path"/volume-top-utilization.txt
+dfm report view -s 'Used %' -l 30 YP_Volumes-Capacity >> "$rpt_path"/volume-top-utilization.txt
+

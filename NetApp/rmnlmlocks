@@ -1,0 +1,194 @@
+#!/bin/bash
+
+# == Synopsis
+#
+# This script removes existing NLM locks typically left behind after an Oracle
+# DBMS did not get shut down gracefully.  The SSH private key is expected to be
+# added and held by the ssh-agent process.
+#
+#
+# == Author
+# Friendly half-blind Lead Storage/Systems Administrator with smiles
+#
+# $Id: rmnlmlocks 10905 2018-01-12 22:31:53Z fma $
+
+PATH=/bin:/usr/bin:/sbin
+
+read_reply='n'
+msg=''
+username=''
+interactive='y'
+fqdn=''
+ip_addr=''
+ctlr=''
+verbose=false
+
+declare -a client_array
+declare -a ctlr_array
+declare -a vol_array
+
+# functions
+gather_nfs_info ()
+{
+   case $interactive in 
+   y)
+      echo -e "For FQDN & IP address(es) of NFS client, please execute the following \
+multi-line commands on the NFS client,"
+      echo -e "\n   echo ; echo \$( hostname ; /sbin/ifconfig | grep 'inet\ ' | \\"
+      echo -e "   egrep '10.[13]|192.168.168' | awk '{ print \$2 }' | \\"
+      echo -e "   awk -F ':' '{ print \$NF }' ) ; echo"
+      echo -e "\nand copy/paste the result below:"
+      read -a client_array
+      echo -e "\nFor NetApp controller(s), please execute the following multi-line \
+command on the affected NFS client system:\n"
+      echo "   echo ; echo \$( mount | grep nfs | grep netapp | awk '{ print \$1 }' | \\"
+      echo "   awk -F ':' '{ print \$1 }' | sort | uniq ) ; echo"
+      echo -e "\n\tand paste the result below."
+      read -a ctlr_array
+      for i in $( seq 0 $(( ${#ctlr_array[*]} - 1 )) ) ; do
+         if [[ ${ctlr_array[$i]} =~ -lif ]] ; then
+            echo -e "\nFor volumes, please execute the following command on the \
+affected NFS client system:\n"
+            echo "  echo ; echo \$(mount | grep nfs | grep netappc-lif | \\"
+            echo "  awk '{ print \$1 }' | awk -F '/' '{ print \$2 }') ; echo"
+            echo -e "\n\tand paste the result below."
+            read -a vol_array
+            break
+         fi
+      done
+      ;;
+   n)
+      fqdn=$(hostname)
+      ip_addr=$( ifconfig | grep 'inet\ ' | egrep '^10.[13]|^192.168.168' | \
+awk '{ print $2 }' | awk -F ':' '{ print $NF }' )
+      client_array=( $fqdn $ip_addr )
+      ctlr_array=( $( mount | grep nfs | grep netapp | awk -F ':' '{ print $1 }' | \
+sort | uniq | sed 's/-sn//' ) )
+      for i in $( seq 0 $(( ${#ctlr_array[*]} - 1 )) ) ; do
+         if [[ ${ctlr_array[$i]} =~ -lif ]] ; then
+            vol_array=( $( mount | grep nfs | grep netappc-lif | awk '{ print $1 }' | \
+awk -F '/' '{ print $2 }' ) )
+         break
+         fi
+      done
+      ;;
+   esac
+}
+
+remove_nlm_lock ()
+{
+   echo -e "\nRemoving NLM lock associated to FQDN / IP address of ${myclient}"
+   echo -e "\tserviced by ${myctlr}..."
+   if [[ $myctlr =~ -lif ]] ; then
+      for i in $( seq 0 $(( ${#vol_array[*]} - 1 )) ) ; do
+         echo -e "\t\tfor volume ${vol_array[$i]}"
+         CMD="set -privilege advanced -confirmation off ; \
+vserver locks break -vserver * -lif * -volume ${vol_array[$i]} ; \
+set -privilege admin -confirmation on"
+         if [[ $verbose == true ]] ; then
+            echo "VERBOSE: ${CMD}"
+            ssh -axl "$username" irvnetappc.<domain> "$CMD"
+         else
+            ssh -axl "$username" irvnetappc.<domain> "$CMD" 1>/dev/null
+         fi
+      done
+   else
+      CMD="lock break -h ${myclient} -p nlm"
+      [[ $verbose == true ]] && echo "VERBOSE: ${CMD}"
+      ssh -axl "$username" "$myctlr" "$CMD"
+   fi
+}
+
+show_help ()
+{
+   echo "${0} -u <username for NetApp access> [-l] [-v]"
+   echo
+   echo "where:"
+   echo -e "\t-u  Name of account for accessing NetApp storage systems."
+   echo -e "\t-l  Use information on local server."
+   echo -e "\t-v  Some verbose output."
+   echo -e "\n***NOTE***\nAccess to the correct SSH private key for the \
+specified account is required.\n"
+}
+
+
+# parse options
+while getopts ":hlu:v" opt ; do
+   case $opt in
+      h)
+         show_help
+         exit 2
+         ;;
+      l)
+         interactive='n'
+         ;;
+      u)
+         username="$OPTARG"
+         ;;
+      v)
+         verbose=true
+         ;;
+      \?)
+         echo "Invalid option: -${OPTARG}" >&2
+         show_help
+         exit 1
+         ;;
+      :)
+         echo "Option -$OPTARG requires an argument." >&2
+         show_help
+         exit 1
+         ;;
+      *)
+         show_help
+         exit 2
+         ;;
+   esac
+done
+
+
+# main logic
+# bail out of $username is blank
+if [[ x$username == x ]] ; then
+   echo -e "The account of '${username}' is not available/valid.\n"
+   show_help
+   exit 2
+fi
+
+gather_nfs_info
+if [[ x${client_array[0]} == x || x${ctlr_array[0]} == x ]] ; then
+   echo -e "No FQDN(s) and/or IP address(es) of NFS client or NetApp \
+controller(s) was/were provided.  Please try again."
+   gather_nfs_info
+   if [[ x${client_array[0]} == x || x${ctlr_array[0]} == x ]] ; then
+      echo -e "Still no FQDN(s) and/or IP address(es) of NFS client or NetApp \
+controller(s) was/were entered.  Abort."
+      exit 1
+   fi
+fi
+
+echo -e "\nReady to perform the following:"
+echo -e "\tEstablish connection via SSH to controller(s):\n\t\t${ctlr_array[*]}"
+echo -e "\tto remove NLM lock associated with NFS client(s):\n\t\t${client_array[*]}"
+for i in $( seq 0 $(( ${#ctlr_array[*]} - 1 )) ) ; do
+   if [[ ${ctlr_array[$i]} =~ -lif ]] ; then
+      echo -e "\trelated to the following volumes:"
+      for v in $( seq 0 $(( ${#vol_array[*]} - 1 )) ) ; do
+         echo -e "\t\t${vol_array[$v]}"
+      done
+      break
+   fi
+done
+echo -e "\tvia account of '${username}'.\n"
+read -t 10 -p 'Do you want to continue (y|N)? ' read_reply
+if [[ $( echo "$read_reply" | tr [:upper:] [:lower:] ) != 'y' || $? -gt 128 ]] ; then
+   echo -e "\nAbort.\n"
+   exit 2
+else
+   for i in $( seq 0 $(( ${#client_array[*]} - 1 )) ) ; do
+      myclient=${client_array[$i]}
+      for j in $( seq 0 $(( ${#ctlr_array[*]} - 1 )) ); do
+         myctlr=$( echo ${ctlr_array[$j]} | sed 's/-sn//' )
+         remove_nlm_lock
+      done
+   done
+fi

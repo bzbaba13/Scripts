@@ -1,0 +1,147 @@
+#!/bin/bash
+
+# == Synopsis
+#
+# This script collects relevant information from Solidfire storage systems
+# in JSON format.  The output files will then be further processed to generate
+# output via ruby.
+#
+# curl --basic -u storageadmins_reporting:re@d0nly --data @{json_construct} --output {outfile} https://10-1-144-210.ip.solidfire.net/json-rpc/{os_version}
+# curl --basic -u storageadmins_reporting:re@d0nly --data @{json_constrcut} --output {outfile} https://10-3-146-150.ip.solidfire.net/json-rpc/{os_version}
+#
+#
+# == Author
+# Friendly half-blind Lead Storage/Systems Administrator with smiles
+#
+# $Id: daily_solidfire_reports 11075 2018-06-07 18:00:58Z fma $
+
+PATH=/bin:/usr/bin
+
+# variables
+os_version='9.0'
+logrotate_bin=/usr/sbin/logrotate
+wc1_url="https://10-1-144-210.ip.solidfire.net/json-rpc/${os_version}"
+ev1_url="https://10-3-146-150.ip.solidfire.net/json-rpc/${os_version}"
+json_path=~/etc
+json_outpath=~/sf-tmp
+rpt_outpath='/var/www/html/sf_reports'
+recipient='<recipient>'
+final_url=''
+rotate_log=true
+gen_rpt=true
+
+#functions
+send_alert ()
+{
+   echo "$msg" | mutt -s "$0 from $(hostname)" $recipient
+   exit 1
+}
+
+
+# rotate existing files
+rotate_log_files ()
+{
+   if [ -x $logrotate_bin ] ; then
+      $logrotate_bin -f /root/etc/daily_reports.logrotate >/dev/null 2>&1
+      EXITVALUE=$?
+      if [ $EXITVALUE != 0 ] ; then
+         logger -t logrotate "ALERT - $0 exited abnormally with [$EXITVALUE]"
+         exit $EXITVALUE
+      fi
+   else
+      echo "The logrotate binary is not in /usr/sbin or executable."
+      exit 1
+   fi
+}
+
+
+# verify location of json_construct files
+verify_json_path ()
+{
+   ls $json_path/List* 1>/dev/null 2>&1
+   if [[ $? -ne 0 ]] ; then
+      msg="The location of the json_construct files: ${json_path} is invalid."
+      send_alert
+   fi
+}
+
+# verify location of output files
+verify_json_outpath ()
+{
+   if [[ ! -d $json_outpath ]] ; then
+      msg="The location of the json output files: ${json_outpath} is invalid."
+      send_alert
+   fi
+}
+
+usage()
+{
+   echo -e "\n${0} [-d] [-h] [-n] [-r]"
+   echo -e "\nwhere:"
+   echo -e "\t-d\tdebug mode (no log file rotation, JSON construct files in ./etc, etc."
+   echo -e "\t-n\tno log file rotation"
+   echo -e "\t-r\tdo not generate report files"
+   echo -e "\t-h\tthis help\n"
+}
+
+
+# parse options
+while getopts ":dhnr" opt ; do
+   case $opt in
+      d)
+         mydebug=true
+         rotate_log=false
+         json_path=./etc
+         json_outpath=./sf-tmp
+         rpt_outpath=~/sf_reports
+         recipient='fma@yp.com'
+         ;;
+      h)
+         usage
+         exit 2
+         ;;
+      n)
+         rotate_log=false
+         ;;
+      r)
+         gen_rpt=false
+         ;;
+      \?)
+         echo "Invalid option: -${OPTARG}" >&2
+         usage
+         exit 1
+         ;;
+      :)
+         echo "Option -$OPTARG requires an argument." >&2
+         usage
+         exit 1
+         ;;
+      *)
+         usage
+         exit 1
+         ;;
+   esac
+done
+
+
+# mainline
+verify_json_path
+verify_json_outpath
+[[ $rotate_log == true ]] && rotate_log_files
+# gather data
+for j in $(ls -1 $json_path | egrep -v 'logrotate|awk|ref') ; do
+   for k in wc1 ev1 ; do
+      final_url=$(eval echo "$"${k}_url"")
+      curl -m 60 -s --basic -u <username>:<password> --data \
+@"${json_path}/${j}" --output ${json_outpath}/${j}_${k}.json $final_url
+   done
+done
+# generate report via ruby script
+if [[ $gen_rpt == true ]] ; then
+   if [[ $mydebug == true ]] ; then
+      ./gen_solidfire_reports.rb -s $json_outpath -d $rpt_outpath
+   else
+      /root/bin/gen_solidfire_reports.rb
+   fi
+fi
+

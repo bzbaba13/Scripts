@@ -1,0 +1,150 @@
+#!/bin/bash
+
+#$Id: daily_crit_err_report 10977 2018-03-20 18:45:50Z fma $
+
+
+PATH=/bin:/usr/bin
+
+# variables
+myctrl=''
+mygrp=''
+mystatus=''
+ctype=''
+finfo=''
+flist=''
+rcpt='<recipient>'
+
+# functions
+function process_files ()
+{
+   for i in $flist
+   do
+      myfile="${i}/etc/messages"
+      # only process if {rootvol}/etc/messages exists, i.e., supposedly mounted via NFS
+      if [ -f "$myfile" ] ; then
+         finfo=$(ls -lh "$myfile" | awk '{ print $5, $6, $7, $8 }')
+         echo "============================================="
+         echo "${i}: ${finfo}"
+         echo "============================================="
+         sed -n -e '/Scrub\ found\ 0/ d' \
+                -e '/rejected\ by\ the\ domain\ controller/ d' \
+                -e '/scrub\.start/ d' \
+                -e '/scrub\.resume/ d' \
+                -e '/scrub\.suspended/ d' \
+                -e '/Cooling\ element.*normal\ status/ d' \
+                -e '/unowned/ p' \
+                -e '/:CRITICAL/ p' \
+                -e '/:error/ p' \
+                -e '/normal\ status/ p' \
+                -e '/graceperiod/ p' \
+                -e '/scrub/ p' \
+                -e '/raid/ p' \
+                -e '/shelf/ p' \
+                -e '/firmware/ p' \
+                -e '/diskown/ p' \
+                -e '/global/ p' \
+                -e '/HA\ interconnect/ p' \
+           "$myfile" | egrep "$yesterday|$today"
+         echo
+      else
+         echo "============================================="
+         echo "CRITICAL: The rootvol of ${i} is NOT mounted via NFS."
+         echo "============================================="
+         echo
+      fi
+   done
+}
+
+function show_help ()
+{
+   echo -e "\n${0} [-h] [-e <e-mail address>]"
+   echo -e "\nwhere:"
+   echo -e "\t-h\tthis help"
+   echo -e "\t-e\t<e-mail address>\n"
+}
+
+
+# parse options
+while getopts ":he:" opt ; do
+   case $opt in
+      h)
+         show_help
+         exit 2
+         ;;
+      e)
+         rcpt=$(echo $OPTARG | tr [:upper:] [:lower:])
+         ;;
+      \?)
+         echo "Invalid option: -${OPTARG}" >&2
+         show_help
+         exit 1
+         ;;
+      :)
+         echo "Option -$OPTARG requires an argument." >&2
+         show_help
+         exit 1
+         ;;
+      *)
+         show_help
+         exit 2
+         ;;
+   esac
+done
+
+
+# check for installation of mutt
+mystatus=$(which mutt 1>/dev/null 2>&1 ; echo "$?")
+if [ "$mystatus" != "0" ] ; then
+   echo -e "\n******** Dependency Problem ********"
+   echo -e "'mutt' (a text mode mail user agent) is required for this script"
+   echo -e "but it is not found in the search path of this system.  Please"
+   echo -e "make sure 'mutt' is installed.  Thank you.\n"
+   exit 1
+fi
+
+# set up dates
+today=$(date | cut -c 5-10)
+yesterday=$(date --date "now -1 day" | cut -c 5-10)
+twodaysago=$(date --date "now -2 days" | cut -c 5-10)
+
+# collect list of all directories
+if [[ -d /net/netapp ]] ; then
+   cd /net/netapp
+   myctrl=$(\ls -1d *netapp* | sort -V)
+else
+   echo "CRITICAL:  /net/netapp on $(hostname) is not a directory." | \
+mutt -s "$0 pre-processing verification error" "$rcpt"
+   exit 1
+fi
+
+# MS Exchange
+ctype='MS Exchange'
+mygrp='netappexch'
+flist=$(echo "$myctrl" | grep "$mygrp")
+if [ "x${flist}" != 'x' ] ; then
+   process_files | mutt -s "${ctype} $0 from $(hostname) generated on $(date)" "$rcpt"
+fi
+
+# Oracle Financial
+ctype='Oracle Financial'
+mygrp='netappof'
+flist=$(echo "$myctrl" | grep "$mygrp")
+if [ "x${flist}" != 'x' ] ; then
+   process_files | mutt -s "${ctype} $0 from $(hostname) generated on $(date)" "$rcpt"
+fi
+
+# Offices
+ctype='Offices'
+mygrp='netappfile'
+flist=$(echo "$myctrl" | grep "$mygrp")
+if [ "x${flist}" != 'x' ] ; then
+   process_files | mutt -s "${ctype} $0 from $(hostname) generated on $(date)" "$rcpt"
+fi
+
+# General
+ctype='General'
+flist=$(echo "$myctrl" | egrep -v 'exch|file|of')
+if [ "x${flist}" != 'x' ] ; then
+   process_files | mutt -s "${ctype} $0 from $(hostname) generated on $(date)" "$rcpt"
+fi
+

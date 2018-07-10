@@ -1,0 +1,233 @@
+#!/bin/bash
+
+# == Synopsis
+#
+# This script create Object Replication of filesystem between HNAS systems
+# via SSC utility provided by HDS.
+#
+#
+# == Author
+# Friendly half-blind Lead Storage/Systems Administrator with smiles
+#
+# $Id: newobjrepl 10096 2016-11-17 01:34:46Z fma $
+
+PATH=/bin:/usr/bin
+
+retval=9
+evs_name='no_evs'
+evs_id=99
+evs_fqdn='no_evs'
+SSC_BIN=<path>/ssc
+HASH_FILE=~/.hash_file_4_evs
+hnas_node='no_hnas_node'
+node_id='no_node_id'
+adm_node='no_adm_node'
+EVS_LIST_ERR='evs list: Could not find the specified EVS'
+read_reply='n'
+network_type='no_network_type'
+cluster_type='no_cluster_type'
+hw_profile='no_hw_profile'
+msg=''
+span_name='no_name'
+fs_size=0
+fs_exist='n'
+
+
+# functions
+identify_admin_node ()
+{
+   case $hnas_node in
+      Irvine4100-C1-1)
+         node_id='1'
+         adm_node='irv4100-adminevs.<domain>'
+         cluster_type='prod'
+         hw_profile='HDS HNAS 4100'
+         ;;
+      Irvine4100-C1-2)
+         node_id='2'
+         adm_node='irv4100-adminevs.<domain>'
+         cluster_type='prod'
+         hw_profile='HDS HNAS 4100'
+         ;;
+      irvine4060-C1-1)
+         node_id='1'
+         adm_node='irv4060-adminevs.<domain>'
+         cluster_type='non-prod'
+         hw_profile='HDS HNAS 4060'
+         ;;
+      irvine4060-C1-2)
+         node_id='2'
+         adm_node='irv4060-adminevs.<domain>'
+         cluster_type='non-prod'
+         hw_profile='HDS HNAS 4060'
+         ;;
+      Ash4060-1-C1)
+         node_id='1'
+         adm_node='ash4060-adminevs.<domain>'
+         cluster_type='prod'
+         hw_profile='HDS HNAS 4060'
+         ;;
+      Ash4060-2-C1)
+         node_id='2'
+         adm_node='ash4060-adminevs.<domain>'
+         cluster_type='prod'
+         hw_profile='HDS HNAS 4060'
+         ;;
+      Ash4060np-1-C1)
+         node_id='1'
+         adm_node='ash4060np-adminevs.<domain>'
+         cluster_type='non-prod'
+         hw_profile='HDS HNAS 4060'
+         ;;
+      Ash4060np-2-C1)
+         node_id='2'
+         adm_node='ash4060np-adminevs.<domain>'
+         cluster_type='non-prod'
+         hw_profile='HDS HNAS 4060'
+         ;;
+      *)
+         echo -e "CRITICAL: HNAS node is not on the list of available HNAS nodes."
+         show_help
+         exit 1
+         ;;
+   esac
+}
+
+fetch_span ()
+{
+   retval=9
+   msg=$($SSC_BIN -u storageadmin -E "$HASH_FILE" "$adm_node" 'span-list' 2>&1)
+   retval=$?
+}
+
+identify_span ()
+{
+   echo -e "\n$msg\n"
+   read -p "Please provide desired span instance name followed by <Enter>: " span_name
+}
+
+request_fs_name ()
+{
+   echo
+   read -p "Please provide filesystem name followed by <Enter>: " fs_name
+}
+
+fetch_all_fs ()
+{
+   msg=$( $SSC_BIN -u storageadmin -E "$HASH_FILE" "$adm_node" \
+'filesystem-list' 2>&1 )
+
+   echo "$msg" | sed '/Tier/ d'
+}
+
+check_fs_name ()
+{
+   retval=9
+   msg=$( $SSC_BIN -u storageadmin -E "$HASH_FILE" "$adm_node" \
+"filesystem-list ${fs_name}" 2>&1 )
+
+   retval=$?
+}
+
+request_fs_size ()
+{
+   echo
+   read -p "Please provide capacity in GiB followed by <Enter>: " fs_size
+}
+
+fetch_evs ()
+{
+   retval=9
+   msg=$($SSC_BIN -u storageadmin -E "$HASH_FILE" "$adm_node" 'evs list' | \
+     sed -n -e '2,3 p' -e '/Service/ p' 2>&1)
+
+   retval=$?
+}
+
+identify_evs ()
+{
+   echo -e "\n$msg\n"
+   read -p "Please provide desired EVS name or ID followed by <Enter>: " evs_name
+}
+
+convert_evs_name_id ()
+{
+   if [[ $evs_name -gt 0 ]] ; then
+# value of evs_name is numeric
+      evs_id=$evs_name
+      msg=$( $SSC_BIN -u storageadmin -E "$HASH_FILE" "$adm_node" \
+"evs list -e ${evs_id}" 2>&1)
+   
+      if [[ $? -eq 0 ]] ; then
+         evs_name=$(echo "$msg" | grep Service | awk '{ print $4 }')
+      else
+         echo -e "\nCRITICAL:  Failed to fetch EVS name for EVS ID of ${evs_id}."
+         echo "$msg"
+         exit 1
+      fi
+   else
+# value of evs_name is alphanumeric
+      msg=$( $SSC_BIN -u storageadmin -E "$HASH_FILE" "$adm_node" \
+"evs list -e ${evs_name}" 2>&1)
+   
+      if [[ $? -eq 0 ]] ; then
+         evs_id=$(echo "$msg" | grep Service | awk '{ print $2 }')
+      else
+         echo -e "\nCRITICAL:  Failed to fetch EVS ID for EVS name of ${evs_id}."
+         echo "$msg"
+         exit 1
+      fi
+   fi
+}
+
+show_help ()
+{
+   echo "${0} -n HNAS_node"
+   echo
+   echo "where:"
+   echo -e "\t-n\tHNAS node in (case sensitive):"
+   echo -e "\t\t  Irvine, CA: irvine4060-C1-1 or irvine4060-C1-2 (non-prod)"
+   echo -e "\t\t              Irvine4100-C1-1 or Irvine4100-C1-2 (prod)"
+   echo -e "\t\t  Ashburn, VA: Ash4060-1-C1 or Ash4060-2-C1     (prod)"
+   echo -e "\t\t               Ash4060np-1-C1 or Ash4060np-2-C1 (non-prod)"
+   echo
+}
+
+
+# parse options
+while getopts ":hn:v" opt ; do
+   case $opt in
+      h)
+         show_help
+         exit 2
+         ;;
+      n)
+         hnas_node="$OPTARG"
+         ;;
+      \?)
+         echo "Invalid option: -${OPTARG}" >&2
+         show_help
+         exit 1
+         ;;
+      :)
+         echo "Option -$OPTARG requires an argument." >&2
+         show_help
+         exit 1
+         ;;
+      *)
+         show_help
+         exit 2
+         ;;
+   esac
+done
+
+
+# main logic
+if [[ -r $HASH_FILE && -x $SSC_BIN ]] ; then
+   fetch_source_fs
+   create_repl_rule
+   create_dest_fs
+else
+   echo -e "\nCRITICAL: Either ${HASH_FILE} or ${SSC_BIN} is not available."
+   exit 1
+fi

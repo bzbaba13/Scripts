@@ -1,0 +1,191 @@
+#!/bin/bash
+
+# == Synopsis
+#
+# This script retrieve information in JSON format from Infinidat Infinibox
+# storage systems.
+#
+# curl --basic -k -u ro-user:ReAd0n1y --output {outfile} {URL}
+#
+#
+# == Author
+# Friendly half-blind Lead Storage/Systems Administrator with smiles
+#
+# $Id: daily_infinidat_reports 11113 2018-07-09 23:05:07Z fma $
+
+PATH=/home/t/bin:/bin:/usr/bin
+
+# variables
+logrotate_bin=/usr/sbin/logrotate
+ev1_base_url='https://url/api/rest'
+st1_base_url='https://url/api/rest'
+final_url=''
+json_outpath=~/ifndt-tmp
+rpt_outpath='/var/www/html/ifndt_reports'
+rotate_log=true
+outfile=''
+outfile_full=''
+mydebug=false
+gen_report=true
+pages_total=0
+recipient='recipient'
+ifndt_obj="components config cgs clusters datasets events exports filesystems \
+hosts initiators links network/interfaces network/spaces \
+notifications/rules notifications/targets pools \
+qos/policies san_clients services system/stats users volumes"
+
+#functions
+send_alert ()
+{
+   echo "$msg" | mutt -s "$0 from $(hostname)" $recipient
+   exit 1
+}
+
+
+# rotate existing files
+rotate_log_files ()
+{
+   if [ -x $logrotate_bin ] ; then
+      $logrotate_bin -f /root/etc/daily_reports.logrotate >/dev/null 2>&1
+      EXITVALUE=$?
+      if [ $EXITVALUE != 0 ] ; then
+         logger -t logrotate "ALERT - $0 exited abnormally with [$EXITVALUE]"
+         exit $EXITVALUE
+      fi
+   else
+      echo "The logrotate binary is not in /usr/sbin or executable."
+      exit 1
+   fi
+}
+
+# verify location of output files
+verify_json_outpath ()
+{
+   if [[ ! -d $json_outpath ]] ; then
+      msg="The location of the json output files: ${json_outpath} is invalid."
+      send_alert
+   fi
+}
+
+# verify jq
+verify_jq ()
+{
+   if [[ -f /opt/local/jq/jq-linux64 && -L <path>/jq ]] ; then
+      break
+   else
+      msg="Required utility 'jq' or the symbolic link in t-home is not available."
+      send_alert
+   fi
+}
+
+# add filter and/or sort to final_url
+add_filter_sort()
+{
+   case $j in
+   'events')
+      final_url="${final_url}&level=in:(ERROR,CRITICAL,WARNING)&sort=-id"
+      ;;
+   esac
+}
+
+# fetch multiple pages from Infinibox
+fetch_multi_pages()
+{
+   outfile_full="${json_outpath}/${outfile}_${page_num}_${k}.json"
+   final_url="${final_base_url}?page_size=${page_size}&page=${page_num}"
+   add_filter_sort
+   curl -m 60 -s -k --basic -u <username>:<password> \
+--output "$outfile_full" "${final_url}"
+}
+
+# fetch single page from Infinibox
+fetch_single_page()
+{
+   outfile_full="${json_outpath}/${outfile}_${page_num}_${k}.json"
+   curl -m 60 -s -k --basic -u <username>:<password> \
+--output "$outfile_full" "${final_url}"
+}
+
+usage()
+{
+   echo -e "\n${0} [-d] [-g] [-h] [-n]"
+   echo -e "\nwhere:"
+   echo -e "\t-d\tdebug mode (no log file rotation, json output files in ./ifndt-tmp, etc."
+   echo -e "\t-g\tno generation of report files"
+   echo -e "\t-n\tno log file rotation"
+   echo -e "\t-h\tthis help\n"
+}
+
+
+# parse options
+while getopts ":dghn" opt ; do
+   case $opt in
+      d)
+         mydebug=true
+         rotate_log=false
+         json_outpath=./ifndt-tmp
+         rpt_outpath=~/ifndt_reports
+         recipient='fma@yp.com'
+         ;;
+      g)
+         gen_report=false
+         ;;
+      h)
+         usage
+         exit 2
+         ;;
+      n)
+         rotate_log=false
+         ;;
+      \?)
+         echo "Invalid option: -${OPTARG}" >&2
+         usage
+         exit 1
+         ;;
+      :)
+         echo "Option -$OPTARG requires an argument." >&2
+         usage
+         exit 1
+         ;;
+      *)
+         usage
+         exit 1
+         ;;
+   esac
+done
+
+
+# mainline
+verify_json_outpath
+verify_jq
+[[ $rotate_log == true ]] && rotate_log_files
+
+# gather data
+for j in $ifndt_obj ; do
+   for k in ev1 st1 ; do
+      page_size=500
+      page_num=1
+      outfile=$(echo $j | sed 's/\//_/')
+      final_base_url=$(eval echo "$"${k}_base_url/${j})
+      if [[ $j == 'config' || $j == 'services' ]] ; then
+         fetch_single_page
+      else
+         fetch_multi_pages
+         pages_total=$(jq '.metadata.pages_total' $outfile_full)
+         while [[ $pages_total -gt $page_num ]] ; do
+            let page_num++
+            fetch_multi_pages
+         done
+      fi
+   done
+done
+
+# generate report via ruby script
+if [[ $gen_report == true ]] ; then
+   if [[ $mydebug == true ]] ; then
+      ./gen_infinidat_reports.rb -s $json_outpath -d $rpt_outpath
+   else
+      /root/bin/gen_infinidat_reports.rb
+   fi
+fi
+

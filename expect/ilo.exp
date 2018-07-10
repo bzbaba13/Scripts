@@ -1,0 +1,29 @@
+#!/usr/bin/expect --
+#
+# Synopsis: This expect script will execute a single command in iLO via SSH.
+#
+# Usage: ilo.exp '{hostname}' '{ilo_password}' '{ilo_command}'
+#
+# Tested iLO commands:
+#    show /map1/snmp1
+#    set /map1/snmp1 oemhp_snmppassthru=no
+#
+# Example (modified):
+# for i in $(grep lefthand db.ev1 | grep ilo | grep -v '^;' | awk '{ print $1 }' | fping -a) ; do n="${i}.ev1" ; echo "$n" ; ~/ilo.exp "$n" '***' 'show /map1/snmp1' | grep snmp ; echo ; done
+#
+# Author: Friendly half-blind Storage/Systems Administrator
+#
+# $Id: ilo.exp 10071 2016-11-08 00:42:39Z fma $
+#
+
+set timeout 5
+
+spawn ssh -l private -o StrictHostKeyChecking=no [lindex $argv 0]
+expect_after eof { exit 0 }
+
+## interact with SSH
+expect "yes/no" { send "yes\r" }
+expect "password:" { send -- "[lindex $argv 1]\r" }
+
+expect "hpiLO" { send -- "[lindex $argv 2]\r" }
+expect "hpiLO" { send -- "exit\r" }

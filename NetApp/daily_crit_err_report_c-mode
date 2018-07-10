@@ -1,0 +1,112 @@
+#!/bin/bash
+
+#$Id: daily_crit_err_report_c-mode 10988 2018-03-26 17:53:51Z fma $
+
+PATH=/bin:/usr/bin
+
+# variables
+rcpt='<repicient>'
+fqdn='irvnetappc.<domain>'
+ok_entry='Verified that cluster high availability (HA) is configured correctly, and that on-disk mailboxes are intact.'
+exit_code='bad'
+
+
+# functions
+function connectivity_test ()
+{
+   ping -q -c 1 "$fqdn" 1>/dev/null
+   exit_code="$?"
+}
+
+function fetch_events ()
+{
+   ssh -ax -l readonly -i ~/.ssh/cdot_ro_rsa "$fqdn" \
+     'event log show -severity EMERGENCY,ALERT,CRITICAL,ERROR,WARNING,NOTICE' | \
+     sed -n \
+     -e "1,2 p" \
+     -e "/${ok_entry}/ d" \
+     -e '/scrub\.start/ d' \
+     -e '/scrub\.resume/ d' \
+     -e '/scrub\.suspended/ d' \
+     -e '/Cooling\ element.*normal\ status/ d' \
+     -e "/Maximum\ number\ .*for\ 'keep-state'\ rules/ d" \
+     -e '/Scrub\ found\ 0\ / d' \
+     -e '/errors=\"0\"\,/ d' \
+     -e '/HA\ interconnect/ p' \
+     -e "\c${twodago}c p" \
+     -e "\c${yesterday}c p" \
+     -e "\c${today}c p"
+}
+
+usage()
+{
+   echo -e "\n${0} [-e <e-mail>] [-h]"
+   echo -e "\nwhere:"
+   echo -e "\t-e\tspecify recipient e-mail address (default: ${rcpt})"
+   echo -e "\t-h\tthis help\n"
+}
+
+
+# parse options
+while getopts ":e:h" opt ; do
+   case $opt in
+      e)
+         rcpt=$OPTARG
+         ;;
+      h)
+         usage
+         exit 2
+         ;;
+      \?)
+         echo "Invalid option: -${OPTARG}" >&2
+         usage
+         exit 1
+         ;;
+      :)
+         echo "Option -$OPTARG requires an argument." >&2
+         usage
+         exit 1
+         ;;
+      *)
+         usage
+         exit 2
+         ;;
+   esac
+done
+
+
+# check for installation of mutt
+mystatus=$(which mutt 1>/dev/null 2>&1 ; echo "$?")
+if [ "$mystatus" != "0" ] ; then
+   echo -e "\n******** Dependency Problem ********"
+   echo -e "'mutt' (a text mode mail user agent) is required for this script"
+   echo -e "but it is not found in the search path of this system.  Please"
+   echo -e "make sure 'mutt' is installed and in the search path.  Thank you.\n"
+   exit 1
+fi
+
+# set up dates
+t_year=$(date +%Y)
+t_month=$(date --date "now" +%m | sed 's/^0//')
+t_date=$(date --date "now" +%d | sed 's/^0//')
+today="${t_month}/${t_date}/${t_year}"
+
+y_year=$(date --date "now -1 day" +%Y)
+y_month=$(date --date "now -1 day" +%m | sed 's/^0//')
+y_date=$(date --date "now -1 day" +%d | sed 's/^0//')
+yesterday="${y_month}/${y_date}/${y_year}"
+
+twodago_year=$(date --date "now -2 day" +%Y)
+twodago_month=$(date --date "now -2 day" +%m | sed 's/^0//')
+twodago_date=$(date --date "now -2 day" +%d | sed 's/^0//')
+twodago="${twodago_month}/${twodago_date}/${twodago_year}"
+
+
+# main
+connectivity_test
+if [ "$exit_code" == '0' ] ; then
+   fetch_events | mutt -s "CDOT $0 from $(hostname) generated on $(date)" "$rcpt"
+else
+   exit 1
+fi
+

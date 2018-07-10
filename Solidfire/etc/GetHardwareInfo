@@ -1,0 +1,1 @@
+{ "id": null, "method": "GetHardwareInfo", "params": { "force": true } }

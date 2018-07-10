@@ -1,0 +1,111 @@
+#!/bin/bash
+
+# == Synopsis
+#
+# This is a BASH script to generate basic reports from Panasas storage systems
+# using SSH access via the read-only 'guest' account.  Application 'mutt' is
+# expected to have been installed via the TPKG.
+#
+#
+# == Author
+# Craig Thomasian, Sr. Storage Administrator.
+#
+# == Editor
+# Friendly half-blind Lead Storage/Systems Administrator with smiles
+#
+# $Id: daily_pas_err_report 10327 2017-02-14 19:09:57Z fma $
+
+
+PATH=/bin:/usr/bin:/sbin
+
+#variables
+PAS=panstor.<domain>
+CMD=''
+logrotate_bin=/usr/sbin/logrotate
+rpt_header=''
+msg=''
+box_line=''
+if [[ $1 != '-d' ]] ; then
+   PRI_KEY=~root/.ssh/panasas_id_rsa
+   RECIPIENT='storageadmins@yp.com'
+   rptpath='/var/www/html/pas_reports'
+else
+   PRI_KEY=~/.ssh/panasas_id_rsa
+   RECIPIENT='fma@yp.com'
+   rptpath="./pas-tmp"
+   [[ ! -d $rptpath ]] && mkdir $rptpath
+fi
+
+
+#functions
+bailout ()
+{
+   echo "$msg" | mutt -s "$0 from $(hostname)" <recipient>
+   exit 1
+}
+
+write_header ()
+{
+   dt_stamp=$(date)
+   box_line=$(for i in $( seq 1 "$(( $(echo $header | wc -L) + 6 ))" )
+   do
+      echo -e '#\c'
+   done)
+   echo "$box_line" > "$rptpath"/"$rptfile"
+   echo -e "#  ${header}  #" >> "$rptpath"/"$rptfile"
+   echo "$box_line" >> "$rptpath"/"$rptfile"
+   echo -e "\nGenerated on ${dt_stamp}" >> "$rptpath"/"$rptfile"
+}
+
+write_body ()
+{
+   echo -e "\n\n*** ${CMD} ***" >> "$rptpath"/"$rptfile"
+   ssh -axl guest -i $PRI_KEY $PAS "$CMD" >> "$rptpath"/"$rptfile"
+}
+
+
+# prerequisites
+ping -qc 1 $PAS 1>/dev/null 2>&1
+if [[ $? -ne 0 ]] ; then
+   msg="Unable to reach ${PAS} via TCP/IP at $(date)."
+   bailout
+fi
+
+which mutt 1>/dev/null 2>&1
+if [[ $? -ne 0 ]] ; then
+   msg="ALERT - $0 exited due to missing mutt"
+   logger -t $0 $msg
+   echo "$msg"
+   exit 1
+fi
+
+if [[ ! -r $PRI_KEY ]] ; then
+   msg="SSH private key (${PRI_KEY}) either does not exist or is not accessible."
+   bailout
+fi
+
+if [[ ! -d $rptpath ]] ; then
+   msg="Output directory (${rptpath}) does not exist."
+   bailout
+fi
+
+
+# main logic
+#sysstat errors
+rptfile='daily_err_report.txt'
+header='Daily Errors & Events Report'
+write_header
+CMD='sysstat errors'
+write_body
+
+# volume list show all sort used order decreasing
+CMD='volume list show all sort used order decreasing'
+write_body
+
+#eventlog --count 20
+CMD='eventlog --count 20'
+write_body
+
+cat "$rptpath"/"$rptfile" | \
+mutt -s 'Daily Panasas Errors & Events Report' "$RECIPIENT"
+

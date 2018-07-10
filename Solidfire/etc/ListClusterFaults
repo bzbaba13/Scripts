@@ -1,0 +1,1 @@
+{ "method": "ListClusterFaults", "params": { "faultTypes" : "all" } }

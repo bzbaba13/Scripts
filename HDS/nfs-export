@@ -1,0 +1,244 @@
+#!/bin/bash
+
+# == Synopsis
+#
+# This script sets/modifies nfs-export entry on HDS storage systems via
+# SSC utility provided by HDS.
+#
+#
+# == Author
+# Friendly half-blind Lead Storage/Systems Administrator with smiles
+#
+# $Id: nfs-export 10622 2017-06-14 22:48:12Z fma $
+
+PATH=/bin:/usr/bin
+
+retval=9
+evs_name='no_evs'
+evs_id=99
+SSC_BIN=<path>/ssc
+HASH_FILE=~/.hash_file_4_evs
+hnas_node='no_hnas_node'
+node_id='no_node_id'
+adm_node='no_adm_node'
+opsdb_err='no_opsdb_err'
+EVS_LIST_ERR='evs list: Could not find the specified EVS'
+read_reply='n'
+cluster_type='no_cluster_type'
+msg=''
+span_name='no_name'
+nfs_clients=''
+
+
+# functions
+identify_admin_node ()
+{
+   case $hnas_node in
+      irv4100)
+         adm_node='irv4100-adminevs.<domain>'
+         ;;
+      irv4060)
+         adm_node='irv4060-adminevs.<domain>'
+         ;;
+      ash4060)
+         adm_node='ash4060-adminevs.<domain>'
+         ;;
+      ash4060np)
+         adm_node='ash4060np-adminevs.<domain>'
+         ;;
+      *)
+         echo -e "CRITICAL: HNAS node is not on the list of available HNAS nodes."
+         show_help
+         exit 1
+         ;;
+   esac
+}
+
+request_fs_name ()
+{
+   echo
+   read -p "Please provide file system name followed by <Enter>: " fs_name
+}
+
+check_fs_name ()
+{
+   retval=9
+   msg=$( $SSC_BIN -u <username> -E "$HASH_FILE" "$adm_node" \
+"filesystem-list ${fs_name}" 2>&1 )
+
+   retval=$?
+}
+
+obtain_export_list ()
+{
+   retval=9
+   msg=$( $SSC_BIN -u <username> -E "$HASH_FILE" "$adm_node" \
+"vn ${evs_id} nfs-export list" 2>&1 )
+
+   retval=$?
+}
+
+identify_export_name ()
+{
+   echo -e "\nBelow is a list of all export name entries related to ${fs_name}:"
+   for i in $(echo ${export_list}) ; do
+      echo -e "\t${i}"
+   done
+   echo -e "\nPlease provide the desired export name entry to be modified"
+   read -p "  followed by <Enter>: " export_name
+}
+
+obtain_nfs_export ()
+{
+   retval=9
+   msg=$( $SSC_BIN -u <username> -E "$HASH_FILE" "$adm_node" \
+"vn ${evs_id} nfs-export list ${export_name}" 2>&1 )
+
+   retval=$?
+}
+
+fetch_nfs_client ()
+{
+   echo -e "\nPlease provide IP address (first if exist) and/or FQDN of the \c"
+   echo -e "NFS client system(s) (separated by space):"
+   read -a nfs_client_array
+}
+
+setup_access_configuration ()
+{
+   for i in $( seq 0 $(( ${#nfs_client_array[*]} - 1 )) ) ; do
+      nfs_clients="${nfs_clients},${nfs_client_array[i]}(rw,sec=sys,norootsquash)"
+   done
+   nfs_clients=$(echo "$nfs_clients" | sed 's/^,//')
+}
+
+show_help ()
+{
+   echo "${0} -n {HNAS node}"
+   echo
+   echo "where:"
+   echo -e "\t-n\tHNAS node in:"
+   echo -e "\t\t  Irvine, CA"
+   echo -e "\t\t\tirv4060 (non-prod)"
+   echo -e "\t\t\tirv4100 (prod)"
+   echo -e "\t\t  Ashburn, VA"
+   echo -e "\t\t\tash4060np (non-prod)"
+   echo -e "\t\t\tash4060 (prod)"
+   echo
+}
+
+
+# parse options
+while getopts ":hn:v" opt ; do
+   case $opt in
+      h)
+         show_help
+         exit 2
+         ;;
+      n)
+         hnas_node="$OPTARG"
+         ;;
+      \?)
+         echo "Invalid option: -${OPTARG}" >&2
+         show_help
+         exit 1
+         ;;
+      :)
+         echo "Option -$OPTARG requires an argument." >&2
+         show_help
+         exit 1
+         ;;
+      *)
+         show_help
+         exit 2
+         ;;
+   esac
+done
+
+
+# main logic
+if [[ -r $HASH_FILE && -x $SSC_BIN && $hnas_node != 'no_hnas_node' ]] ; then
+   identify_admin_node
+   request_fs_name
+   if [[ x$fs_name == x ]] ; then
+      echo -e "\nNo file system name was entered.  Please try again."
+      request_fs_name
+      if [[ x$fs_name == x ]] ; then
+         echo -e "\nStill no file system name was entered.  Aborting.\n"
+         exit 1
+      fi
+   fi
+   check_fs_name
+   if [[ $retval != 0 ]] ; then
+      echo -e "\nEntered file system name '${fs_name}' is not found.  Please try again."
+      request_fs_name
+      check_fs_name
+      if [[ $retval != 0 ]] ; then
+         echo -e "\nEntered file system name of '${fs_name}' is still not found.  Aborting.\n"
+         exit 1
+      fi
+   fi
+   evs_id=$(echo "$msg" | grep 'Mount' | awk '{ print $5 }')
+   if [[ x$evs_id == x ]] ; then
+      echo -e "\nCRITICAL: Failed to figure out evs_id from output of filesystem-list."
+      exit 1
+   fi
+   obtain_export_list
+   if [[ $retval == 0 ]] ; then
+      export_list=$(echo "$msg" | grep 'Export\ name' | grep "$fs_name" | awk '{ print $NF }')
+      identify_export_name
+      if [[ x$export_name == x ]] ; then
+         echo -e "\nNo export name was entered.  Please try again."
+         identify_export_name
+         if [[ x$export_name == x ]] ; then
+            echo -e "\nStill no export name was entered.  Aborting."
+            exit 1
+         fi
+      fi
+   else
+      echo -e "\nCRITICAL: Failed to obtain nfs-export data of EVS #${evs_id}."
+      echo -e "${msg}\n"
+      exit 1
+   fi
+   obtain_nfs_export
+   if [[ $retval == 0 ]] ; then
+      echo -e "\n${export_name} currently allows access from following NFS clients"
+      echo "$msg" | sed -n '/Export\ configuration/,+99 p'
+      fetch_nfs_client
+      if [[ x${nfs_client_array[0]} == x ]] ; then
+         echo -e "\tNo NFS client system(s) entered."
+         fetch_nfs_client
+         if [[ x${nfs_client_array[0]} == x ]] ; then
+            echo -e "\tStill no NFS client system(s) entered.  Aborting.\n"
+            exit 1
+         fi
+      fi
+      echo -e "\nReady to modify NFS client(s) of ${export_name} to:"
+      for i in $( seq 0 $(( ${#nfs_client_array[*]} - 1 )) ) ; do
+         echo -e "\t${nfs_client_array[i]}"
+      done
+      read_reply='n'
+      echo
+      read -p "Do you want to proceed (y/N)? " read_reply
+      if [[ $(echo "$read_reply" | tr [:upper:] [:lower]) == 'y' && $? -lt 129 ]] ; then
+         setup_access_configuration
+         $SSC_BIN -u <username> -E "$HASH_FILE" "$adm_node" \
+"vn ${evs_id} nfs-export mod -d -c ${nfs_clients} ${export_name}" 2>&1
+         if [[ $? == 0 ]] ; then
+            obtain_nfs_export
+            echo -e "\nBelow is the new export configuration of ${export_name}:"
+            echo -e "$msg\n"
+         else
+            echo -e "\nCRITICAL: Modification of nfs-export failed.\n"
+         fi
+      fi
+   else
+      echo -e "\nCRITICAL: Failed to obtain nfs-export data of ${export_name}."
+      echo -e "${msg}\n"
+      exit 1
+   fi
+else
+   echo -e "\nCRITICAL: Either ${HASH_FILE}, ${SSC_BIN}, or {HNAS node} is not available."
+   show_help
+   exit 1
+fi

@@ -1,0 +1,200 @@
+#!/bin/bash
+
+# == Synopsis
+#
+# This is a BASH script to generate basic reports from Panasas storage systems
+# using SSH access via the read-only 'guest' account.  Application 'mutt' is
+# expected to have been installed via the TPKG.
+#
+#
+# == Author
+# Craig Thomasian, Sr. Storage Administrator.
+#
+# == Editor
+# Friendly half-blind Lead Storage/Systems Administrator with smiles
+#
+# $Id: daily_panasas_reports 10978 2018-03-20 19:16:47Z fma $
+
+
+PATH=/bin:/usr/bin:/sbin
+
+#variables
+PAS=panstor.<domain>
+CMD=''
+logrotate_bin=/usr/sbin/logrotate
+rpt_header=''
+msg=''
+box_line=''
+log_rotate=true
+PRI_KEY=~root/.ssh/panasas_id_rsa
+rptpath='/var/www/html/pas_reports'
+
+
+#functions
+bailout ()
+{
+   echo "$msg" | mutt -s "$0 from $(hostname)" <recipient_email_addr>
+   exit 1
+}
+
+write_header ()
+{
+   dt_stamp=$(date)
+   box_line=$(for i in $( seq 1 "$(( $(echo $header | wc -L) + 6 ))" )
+   do
+      echo -e '#\c'
+   done)
+   echo "$box_line" > "$rptpath"/"$rptfile"
+   echo -e "#  ${header}  #" >> "$rptpath"/"$rptfile"
+   echo "$box_line" >> "$rptpath"/"$rptfile"
+   echo -e "\nGenerated on ${dt_stamp}\n" >> "$rptpath"/"$rptfile"
+}
+
+write_body ()
+{
+   echo -e "\n*** ${CMD} ***" >> "$rptpath"/"$rptfile"
+   ssh -axl guest -i $PRI_KEY $PAS "$CMD" >> "$rptpath"/"$rptfile"
+}
+
+write_body_4SG ()
+{
+   ssh -axl guest -i $PRI_KEY $PAS "$CMD" > "$rptpath"/"$rptfile"
+}
+
+function show_help ()
+{
+   echo -e "\n${0} [-h] [-d] [-n]"
+   echo -e "\nwhere:"
+   echo -e "\t-h\tthis help"
+   echo -e "\t-d\tdebug mode; use private key in ${HOME}/.ssh/ & working path of ./pas-tmp"
+   echo -e "\t-n\tdo not rotate existing report files"
+   echo ''
+}
+
+
+# parse options
+while getopts ":hdn" opt ; do
+   case $opt in
+      h)
+         show_help
+         exit 2
+         ;;
+      d)
+         PRI_KEY=~/.ssh/panasas_id_rsa
+         rptpath="./pas-tmp"
+         [[ ! -d $rptpath ]] && mkdir $rptpath
+         ;;
+      n)
+         log_rotate=false
+         ;;
+      \?)
+         echo "Invalid option: -${OPTARG}" >&2
+         show_help
+         exit 1
+         ;;
+      :)
+         echo "Option -$OPTARG requires an argument." >&2
+         show_help
+         exit 1
+         ;;
+      *)
+         show_help
+         exit 2
+         ;;
+   esac
+done
+
+
+# prerequisites
+ping -qc 1 $PAS 1>/dev/null 2>&1
+if [[ $? -ne 0 ]] ; then
+   msg="Unable to reach ${PAS} via TCP/IP at $(date)."
+   bailout
+fi
+
+which mutt 1>/dev/null 2>&1
+if [[ $? -ne 0 ]] ; then
+   msg="ALERT - $0 exited due to missing mutt"
+   logger -t $0 $msg
+   echo "$msg"
+   exit 1
+fi
+
+if [[ ! -r $PRI_KEY ]] ; then
+   msg="SSH private key (${PRI_KEY}) either does not exist or is not accessible."
+   bailout
+fi
+
+if [[ ! -d $rptpath ]] ; then
+   msg="Output directory (${rptpath}) does not exist."
+   bailout
+fi
+
+
+# rotate existing files
+if [[ $log_rotate == true ]] ; then
+   if [ -x $logrotate_bin ] ; then
+      $logrotate_bin -f /root/etc/daily_reports.logrotate >/dev/null 2>&1
+      EXITVALUE=$?
+      if [ $EXITVALUE != 0 ] ; then
+         logger -t logrotate "ALERT - $0 exited abnormally with code [$EXITVALUE]"
+         exit $EXITVALUE
+      fi
+   else
+      echo "The logrotate binary is not in /usr/sbin or executable."
+      exit 1
+   fi
+fi
+
+
+# main logic
+rptfile='general_info.txt'
+header='General Information Report'
+write_header
+CMD='about'
+write_body
+CMD='bladeset list show all allcolumns'
+write_body
+CMD='syscontrol realmmgr'
+write_body
+CMD='netconfig'
+write_body
+
+rptfile='volumes.txt'
+header='Volumes Report'
+write_header
+CMD='volume list show all sort used order decreasing'
+write_body
+CMD='volume list show all allcolumns'
+write_body
+
+rptfile='snapshot_info.txt'
+header='Snapshot Information Report'
+write_header
+CMD='snapshot list'
+write_body
+CMD='snapshot schedul'
+write_body
+
+rptfile='storage_info.txt'
+header='Storage Information Report'
+write_header
+CMD='sysstat storage summary'
+write_body
+CMD='syscontrol realmmgr'
+write_body
+CMD='sysstat storage'
+write_body
+
+rptfile='all_assets.txt'
+header='Assets Report'
+write_header
+CMD='sysmap assets'
+write_body
+
+# reports for StoraGenie
+rptfile='all_volumes_4SG.txt'
+CMD='volume list show all'
+write_body_4SG
+sed -i -e '1,2 d' -e '/Displayed/ d' "$rptpath"/"$rptfile"
+

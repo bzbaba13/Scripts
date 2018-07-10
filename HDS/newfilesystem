@@ -1,0 +1,589 @@
+#!/bin/bash
+
+# == Synopsis
+#
+# This script create file system plus directory/ies and/or virtual volume(s)
+# as well as nfs-export entry/ies on HDS storage systems via SSC utility
+# provided by HDS.
+#
+#
+# == Author
+# Friendly half-blind Lead Storage/Systems Administrator with smiles
+#
+# $Id: newfilesystem 10697 2017-08-03 21:08:29Z fma $
+
+PATH=/bin:/usr/bin
+
+retval=9
+evs_name='no_evs'
+evs_id=99
+evs_fqdn='no_evs'
+SSC_BIN=<path>/ssc
+HASH_FILE=~/.hash_file_4_evs
+hnas_node='no_hnas_node'
+node_id='no_node_id'
+adm_node='no_adm_node'
+opsdb_err='no_opsdb_err'
+EVS_LIST_ERR='evs list: Could not find the specified EVS'
+read_reply='n'
+network_type='no_network_type'
+cluster_type='no_cluster_type'
+hw_profile='no_hw_profile'
+msg=''
+span_name='no_name'
+fs_size=0
+virtual_volumes='n'
+fs_exist='n'
+nfs_clients=''
+blk_size='4'
+email_list='recipients'
+
+
+# functions
+identify_admin_node ()
+{
+   case $hnas_node in
+      irv4100-c1-1)
+         node_id='1'
+         adm_node='irv4100-adminevs.<domain>'
+         cluster_type='prod'
+         hw_profile='HDS HNAS 4100'
+         ;;
+      irv4100-c1-2)
+         node_id='2'
+         adm_node='irv4100-adminevs.<domain>'
+         cluster_type='prod'
+         hw_profile='HDS HNAS 4100'
+         ;;
+      irv4060-c1-1)
+         node_id='1'
+         adm_node='irv4060-adminevs.<domain>'
+         cluster_type='non-prod'
+         hw_profile='HDS HNAS 4060'
+         ;;
+      irv4060-c1-2)
+         node_id='2'
+         adm_node='irv4060-adminevs.<domain>'
+         cluster_type='non-prod'
+         hw_profile='HDS HNAS 4060'
+         ;;
+      ash4060-1-c1)
+         node_id='1'
+         adm_node='ash4060-adminevs.<domain>'
+         cluster_type='prod'
+         hw_profile='HDS HNAS 4060'
+         ;;
+      ash4060-2-c1)
+         node_id='2'
+         adm_node='ash4060-adminevs.<domain>'
+         cluster_type='prod'
+         hw_profile='HDS HNAS 4060'
+         ;;
+      ash4060-np-c2-1)
+         node_id='1'
+         adm_node='ash4060np-adminevs.<domain>'
+         cluster_type='non-prod'
+         hw_profile='HDS HNAS 4060'
+         ;;
+      ash4060-np-c2-2)
+         node_id='2'
+         adm_node='ash4060np-adminevs.<domain>'
+         cluster_type='non-prod'
+         hw_profile='HDS HNAS 4060'
+         ;;
+      *)
+         echo -e "CRITICAL: HNAS node is not on the list of available HNAS nodes."
+         show_help
+         exit 1
+         ;;
+   esac
+}
+
+fetch_span ()
+{
+   retval=9
+   msg=$($SSC_BIN -u storageadmin -E "$HASH_FILE" "$adm_node" 'span-list' 2>&1)
+   retval=$?
+}
+
+identify_span ()
+{
+   echo -e "\n$msg\n"
+   read -p "Please provide desired span instance name followed by <Enter>: " span_name
+}
+
+request_fs_name ()
+{
+   echo
+   read -p "Please provide file system name followed by <Enter>: " fs_name
+}
+
+fetch_all_fs ()
+{
+   msg=$( $SSC_BIN -u storageadmin -E "$HASH_FILE" "$adm_node" \
+'filesystem-list' 2>&1 )
+
+   echo "$msg" | sed '/Tier/ d'
+}
+
+check_fs_name ()
+{
+   retval=9
+   msg=$( $SSC_BIN -u storageadmin -E "$HASH_FILE" "$adm_node" \
+"filesystem-list ${fs_name}" 2>&1 )
+
+   retval=$?
+}
+
+request_fs_size ()
+{
+   fs_size=0
+   echo
+   read -p "Please provide capacity in GiB followed by <Enter>: " fs_size
+}
+
+fetch_evs ()
+{
+   retval=9
+   msg=$($SSC_BIN -u storageadmin -E "$HASH_FILE" "$adm_node" 'evs list' | \
+     sed -n -e '2,3 p' -e '/Service/ p' 2>&1)
+
+   retval=$?
+}
+
+identify_evs ()
+{
+   echo -e "\n$msg\n"
+   read -p "Please provide desired EVS name or ID followed by <Enter>: " evs_name
+}
+
+fetch_dirs ()
+{
+   echo -e "\nPlease provide desired directory/ies or virtual-volume(s) \
+(separated by space)"
+   echo "in file system '${fs_name}' followed by <Enter>:"
+   read -a dirs_array
+}
+
+fetch_quotas ()
+{
+   echo -e "\nPlease provide quota(s) <n[K|M|G|T|P|E]> (separated by space) associated to"
+   echo -e "\t${dirs_array[*]}"
+   echo "  in the same order.  Enter a '0' if quota is not needed the particular virtual volume(s)"
+   read -p "  followed by <Enter>: " -a quotas_array
+}
+
+right_case_quotas ()
+{
+   for i in $( seq 0 $(( ${#quotas_array[*]} - 1 )) ) ; do
+      quotas_array[i]=$(echo ${quotas_array[i]} | tr [:lower:] [:upper:])
+   done
+}
+
+check_export_entries ()
+{
+   retval=9
+   for i in $( seq 0 $(( ${#dirs_array[*]} - 1 )) ) ; do
+      msg=$( $SSC_BIN -u storageadmin -E "$HASH_FILE" "$adm_node" \
+"evs-select ${evs_name} nfs-export list /${fs_name}/${dirs_array[i]}" 2>&1 )
+
+      if [[ $? -eq 0 ]] ; then
+         echo -e "\nCRITICAL: Provided nfs-export entry of /${fs_name}/${dirs_array[i]} already exists."
+         echo "$msg"
+         echo -e "\nPlease investigate via HDS SMU or SSC.  Aborting.\n"
+         exit 1
+      fi
+   done
+}
+
+create_filesystem ()
+{
+   retval=9
+   echo -e "\nCreating file system ${fs_name}..."
+   msg=$($SSC_BIN -u storageadmin -E "$HASH_FILE" "$adm_node" \
+"evs-select ${evs_name} filesystem-create -b ${blk_size} ${span_name} ${fs_name} 1 ${fs_size}" 2>&1)
+
+   retval=$?
+}
+
+enable_thin_provision ()
+{
+   retval=9
+   echo -e "\nEnabling thin provisioning on file system '${fs_name}'..."
+   msg=$($SSC_BIN -u storageadmin -E "$HASH_FILE" "$adm_node" \
+     "filesystem-thin ${fs_name} on" 2>&1)
+
+   retval=$?
+}
+
+fetch_nfs_client ()
+{
+   echo
+   echo "Please provide IP address or FQDN of the NFS client system(s) (separated by space):"
+   read -a nfs_client_array
+}
+
+setup_access_configuration ()
+{
+   for i in $( seq 0 $(( ${#nfs_client_array[*]} - 1 )) ) ; do
+      nfs_clients="${nfs_clients},${nfs_client_array[i]}(rw,sec=sys,norootsquash)"
+   done
+   nfs_clients=$(echo "$nfs_clients" | sed 's/^,//')
+}
+
+create_exports ()
+{
+   echo -e "\nCreating export directory/ies..."
+   for i in $( seq 0 $(( ${#dirs_array[*]} - 1 )) ) ; do
+      echo -e "\t/${fs_name}/${dirs_array[i]}"
+      msg=$( $SSC_BIN -u storageadmin -E "$HASH_FILE" "$adm_node" \
+"evs-select ${evs_name} nfs-export add -c '${nfs_clients}' \
+/${fs_name}/${dirs_array[i]} ${fs_name} /${fs_name}/${dirs_array[i]}" 2>&1 )
+
+      retval=$?
+      echo -e "\t\t$msg"
+      if [[ $retval -ne 0 ]] ; then
+         echo -e "\nCRITICAL: Failed to add nfs-export entry for /${fs_name}/${disr_array[i]}."
+         exit 1
+      fi
+   done
+}
+
+add_quota ()
+{
+   echo -e "\t\tAdding quota to /${fs_name}/${dirs_array[i]}..."
+   msg=$( $SSC_BIN -u storageadmin -E "$HASH_FILE" "$adm_node" \
+"evs-select ${evs_name} quota add --usage-limit ${quotas_array[i]} \
+--usage-critical 92 --usage-reset 85 \
+${fs_name} /${fs_name}/${dirs_array[i]}" 2>&1 )
+
+   if [[ $? -ne 0 ]] ; then
+      echo -e "\nWARNING:  Unable to apply quota to /${fs_name}/${dirs_array[i]}."
+      echo "$msg"
+   fi
+}
+
+add_virtual_volumes ()
+{
+   echo -e "\nAdding virtual volume(s)..."
+   for i in $( seq 0 $(( ${#dirs_array[*]} - 1 )) ) ; do
+      echo -e "\t${fs_name}/${dirs_array[i]}"
+      msg=$( $SSC_BIN -u storageadmin -E "$HASH_FILE" "$adm_node" \
+"evs-select ${evs_name} virtual-volume add ${fs_name} \
+/${fs_name}/${dirs_array[i]} /${fs_name}/${dirs_array[i]} \"${email_list}\"" 2>&1 )
+
+      if [[ $? -ne 0 ]] ; then
+         echo -e "\nCRITICAL: Failed to add virtual-volume for file system \
+named ${fs_name}"
+         echo -e "\t\twith name and path of /${fs_name}/${dir_sarray[i]}."
+         echo -e "\t\t${msg}"
+         exit 1
+      fi
+      [[ ${quotas_array[i]} != 0 ]] && add_quota
+   done
+}
+
+fetch_emails ()
+{
+   echo -e "\nPlease provide e-mail address(es) (separated by space) for virtual volume(s):"
+   read -a emails_array
+}
+
+consolidate_emails ()
+{
+   for i in $( seq 0 $(( ${#emails_array[*]} - 1 )) ) ; do
+      email_list="${email_list};${emails_array[i]}"
+   done
+}
+
+display_results ()
+{
+   echo -e "\nSummary\n~~~~~~~~"
+   for i in $( seq 0 $(( ${#dirs_array[*]} - 1 )) ) ; do
+      echo -e "NFS-export information on ${fs_name}/${dirs_array[i]}..."
+      msg=$( $SSC_BIN -u storageadmin -E "$HASH_FILE" "$adm_node" \
+"evs-select ${evs_name} nfs-export list /${fs_name}/${dirs_array[i]}" 2>&1 )
+
+      if [[ $? -eq 0 ]] ; then
+         echo "$msg" | sed -n -e '/Export\ name/,+1 p' -e '/Export\ configuration/,+99 p'
+         echo
+      else
+         echo -e "\nWARNING: Unable to fetch nfs-export information."
+         echo -e "\t${msg}"
+      fi
+   done
+   if [[ $virtual_volumes == 'y' ]] ; then
+      echo -e "\nVirtual volume information of ${fs_name}..."
+      msg=$( $SSC_BIN -u storageadmin -E "$HASH_FILE" "$adm_node" \
+"evs-select ${evs_name} virtual-volume list ${fs_name}" 2>&1 )
+
+      if [[ $? -eq 0 ]] ; then
+         echo "$msg"
+      else
+         echo -e "\nWARNING: Unable to fetch virtual volume information."
+         echo "\t${msg}"
+      fi
+      echo -e "\nQuota information of ${fs_name}..."
+      msg=$( $SSC_BIN -u storageadmin -E "$HASH_FILE" "$adm_node" \
+"evs-select ${evs_name} quota list ${fs_name}" 2>&1 )
+
+      if [[ $? -eq 0 ]] ; then
+         echo "$msg" | sed -n '/Target/,+5 p'
+      else
+         echo -e "\nWARNING:  Unable to fetch quota information on ${fs_name}."
+         echo "\t${msg}"
+      fi
+   fi
+   echo -e "\n= = = = = = = =\nInformation for mounting purpose\n= = = = = = = ="
+   [[ $evs_name =~ ash ]] && domain='<domain>' \
+|| domain='<domain>'
+
+   for i in $( seq 0 $(( ${#dirs_array[*]} - 1 )) ) ; do
+      echo -e "\t${evs_name}.${domain}:/${fs_name}/${dirs_array[i]}"
+   done
+   echo
+}
+
+convert_evs_name_id ()
+{
+   if [[ $evs_name -gt 0 ]] ; then
+# value of evs_name is numeric
+      evs_id=$evs_name
+      msg=$( $SSC_BIN -u storageadmin -E "$HASH_FILE" "$adm_node" \
+"evs list -e ${evs_id}" 2>&1)
+   
+      if [[ $? -eq 0 ]] ; then
+         evs_name=$(echo "$msg" | grep Service | awk '{ print $4 }')
+      else
+         echo -e "\nCRITICAL:  Failed to fetch EVS name for EVS ID of ${evs_id}."
+         echo "$msg"
+         exit 1
+      fi
+   else
+# value of evs_name is alphanumeric
+      msg=$( $SSC_BIN -u storageadmin -E "$HASH_FILE" "$adm_node" \
+"evs list -e ${evs_name}" 2>&1)
+   
+      if [[ $? -eq 0 ]] ; then
+         evs_id=$(echo "$msg" | grep Service | awk '{ print $2 }')
+      else
+         echo -e "\nCRITICAL:  Failed to fetch EVS ID for EVS name of ${evs_id}."
+         echo "$msg"
+         exit 1
+      fi
+   fi
+}
+
+show_help ()
+{
+   echo "${0} -d {HNAS_node} [-v] [-B]"
+   echo
+   echo "where:"
+   echo -e "\t-d\tHNAS node in (case sensitive):"
+   echo -e "\t\t  Irvine, CA: irv4060-c1-1 or irv4060-c1-2 (non-prod)"
+   echo -e "\t\t              irv4100-c1-1 or irv4100-c1-2 (prod)"
+   echo -e "\t\t  Ashburn, VA: ash4060-np-c2-1 or ash4060-np-c2-2 (non-prod)"
+   echo -e "\t\t               ash4060-1-c1 or ash4060-2-c1 (prod)"
+   echo -e "\t-v\tUse virtual volumes."
+   echo -e "\t-B\tUse 32k (instead of default of 4k) block size."
+   echo
+}
+
+
+# parse options
+while getopts ":Bd:hv" opt ; do
+   case $opt in
+      B)
+         blk_size='32'
+         ;;
+      d)
+         hnas_node="$OPTARG"
+         ;;
+      h)
+         show_help
+         exit 2
+         ;;
+      v)
+         virtual_volumes='y'
+         ;;
+      \?)
+         echo "Invalid option: -${OPTARG}" >&2
+         show_help
+         exit 1
+         ;;
+      :)
+         echo "Option -$OPTARG requires an argument." >&2
+         show_help
+         exit 1
+         ;;
+      *)
+         show_help
+         exit 2
+         ;;
+   esac
+done
+
+
+# main logic
+if [[ -r $HASH_FILE && -x $SSC_BIN ]] ; then
+   identify_admin_node
+   echo -e "\nBelow is a list of all existing file system(s) on ${hnas_node}:"
+   fetch_all_fs
+   request_fs_name
+   if [[ x$fs_name == x ]] ; then
+      echo -e "\nNo file system name was entered.  Below is a list of existing \
+file system(s):"
+
+      fetch_all_fs
+      request_fs_name
+   fi
+   if [[ x$fs_name == x ]] ; then
+      echo -e "\nStill no file system name entered.  Aborting.\n"
+      exit 1
+   fi
+   check_fs_name
+   if [[ $retval -eq 0 ]] ; then
+      echo -e "\nProvided file systems name exists."
+      echo -e "$msg\n"
+      read_reply='n'
+      read -t 30 \
+-p "Do you want to continue and create virtual-volume(s) in the same file \
+system (y/N)? " read_reply
+
+      if [[ $(echo "$read_reply" | tr [:upper:] [:lower:]) != 'y' || $? -gt 128 ]] ; then
+         echo -e "\nAbort.\n"
+         exit 2
+      else
+         fs_exist='y'
+         virtual_volumes='y'
+         evs_name=$(echo "$msg" | grep "$fs_name" | awk '{ print $5 }')
+         span_name=$(echo "$msg" | grep "$fs_name" | awk '{ print $3 }')
+      fi
+   else
+      echo -e "\nProvided file systems name does not exist so creating new file system."
+      request_fs_size
+      if [[ $fs_size -lt 1 ]] ; then
+         echo -e "\nYou've entered an invalid ${fs_size} GiB for the size."
+         echo "Please try again."
+         request_fs_size
+         if [[ $fs_size -lt 1 ]] ; then
+            echo -e "\nThe entered $fs_size} GiB is still invalid.  Abort."
+            exit 1
+         fi
+      fi
+      fetch_span
+      if [[ $retval -eq 0 ]] ; then
+         identify_span
+         if [[ x$span_name == x ]] ; then
+            echo -e "\nNo span name has been provided.  Please try again."
+            identify_span
+            if [[ x$span_name == x ]] ; then
+               echo -e "\nStill no span name has been provided.  Aborting."
+               exit 1
+            fi
+         fi
+      else
+         echo -e "\nCRITICAL: Unable to fetch span information."
+         echo -e "$msg"
+         exit 1
+      fi
+      fetch_evs
+      if [[ $retval -eq 0 ]] ; then
+         identify_evs
+      else
+         echo -e "\nCRITICAL: Unable to fetch evs information."
+         echo -e "$msg"
+         exit 1
+      fi
+   fi
+   convert_evs_name_id
+   fetch_dirs
+   if [[ x${dirs_array[0]} == x ]] ; then
+      echo -e "\tNo directory/ies entered."
+      fetch_dirs
+      if [[ x${dirs_array[0]} == x ]] ; then
+         echo -e "\tStill no directory/ies entered.  Aborting."
+         exit 1
+      fi
+   fi
+   check_export_entries
+   if [[ $virtual_volumes == 'y' ]] ; then
+      fetch_quotas
+      if [[ ${#dirs_array[*]} -ne ${#quotas_array[*]} ]] ; then
+         echo -e "\tThe number of quota(s) (${#quotas_array[*]}) & \
+virtual volume(s) (${#dirs_array[*]}) specified do not match."
+
+         fetch_quotas
+         if [[ ${#dirs_array[*]} -ne ${#quotas_array[*]} ]] ; then
+            echo -e "\tThe number of quota(s) and virtual volume(s) still do not match.  Aborting."
+            exit 1
+         fi
+      fi
+      right_case_quotas
+      fetch_emails
+      consolidate_emails
+   fi
+   fetch_nfs_client
+   if [[ x${nfs_client_array[0]} == x ]] ; then
+      echo -e "\tNo NFS client system(s) entered."
+      fetch_nfs_client
+      if [[ x${nfs_client_array[0]} == x ]] ; then
+         echo -e "\tStill no NFS client system(s) entered.  Aborting."
+         exit 1
+      fi
+   fi
+   echo -e "\nReady to perform the following tasks:"
+   if [[ $fs_exist == 'y' ]] ; then
+      if [[ $virtual_volumes == 'y' ]] ; then
+         echo -e "\tCreate the following virtual volume(s):\n\t\t${dirs_array[*]}"
+         echo -e "\twith associated quota(s):\n\t\t${quotas_array[*]}"
+         echo -e "\twith e-mail addresses:"
+         echo -e "\t\t${email_list}"
+      else
+         echo -e "\tCreate the following directory/ies:\n\t\t${dirs_array[*]}"
+      fi
+      echo -e "\tin the existing file system named:  ${fs_name}"
+      echo -e "\tserviced by EVS:  ${evs_name}"
+   else
+      echo -e "\tCreate thin-provisioned file system named:  ${fs_name}"
+      echo -e "\twith capcity of up to:  ${fs_size} GiB"
+      echo -e "\tin block size of:  ${blk_size}k"
+      echo -e "\ton span named:  ${span_name}"
+      echo -e "\tserviced by EVS named:  ${evs_name}"
+      if [[ $virtual_volumes == 'y' ]] ; then
+         echo -e "\twith the following virtual volume(s):\n\t\t${dirs_array[*]}"
+         echo -e "\twith associated quota(s):\n\t\t${quotas_array[*]}"
+         echo -e "\twith e-mail addresses:"
+         echo -e "\t\t${email_list}"
+      else
+         echo -e "\twith the following directory/ies:\n\t\t${dirs_array[*]}"
+      fi
+   fi
+   echo -e "\tfor the following NFS client system(s):"
+   for i in $( seq 0 $(( ${#nfs_client_array[*]} - 1 )) ) ; do
+      echo -e "\t\t${nfs_client_array[i]}"
+   done
+   read_reply='n'
+   echo
+   read -p "Do you want to proceed (y/N)? " read_reply
+   if [[ $(echo "$read_reply" | tr [:upper:] [:lower]) == 'y' && $? -lt 129 ]] ; then
+      if [[ $fs_exist != 'y' ]] ; then
+         create_filesystem
+         if [[ $retval -eq 0 ]] ; then
+            enable_thin_provision
+         else
+            echo -e "\nCRITICAL: Failed to create file system '${fs_name}' on EVS '${evs_name}.'"
+            echo -e "$msg"
+            exit 1
+         fi
+      fi
+      setup_access_configuration
+      create_exports
+      [[ $virtual_volumes == 'y' ]] && add_virtual_volumes
+      display_results
+   fi
+else
+   echo -e "\nCRITICAL: Either ${HASH_FILE} or ${SSC_BIN} is not available."
+   exit 1
+fi
+

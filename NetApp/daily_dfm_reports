@@ -1,0 +1,167 @@
+#!/bin/bash
+
+#$Id: daily_dfm_reports 10882 2017-12-11 23:23:44Z fma $
+
+PATH=/bin:/usr/bin
+
+# variables
+rpt_path='/var/www/html/dfm_reports'
+logrotate_bin=/usr/sbin/logrotate
+
+# rotate existing files
+if [[ $1 != '-d' ]] ; then
+   if [[ -x $logrotate_bin ]] ; then
+      $logrotate_bin -f /root/etc/daily_reports.logrotate >/dev/null 2>&1
+      EXITVALUE=$?
+      if [ $EXITVALUE != 0 ] ; then
+         logger -t logrotate "ALERT - $0 exited abnormally with [$EXITVALUE]"
+         exit $EXITVALUE
+      fi
+   else
+      echo "The logrotate binary is not in /usr/sbin or executable."
+      exit 1
+   fi
+fi
+
+# begin generating reports
+outfile="$rpt_path"/controllers.txt
+echo 'All Controllers Report' > $outfile
+dt_stamp=`date`
+echo -e "Generated on ${dt_stamp}\n" >> $outfile
+dfm report view controllers 2>&1 | cut -b 11- >> $outfile
+
+outfile="$rpt_path"/controllers-releases.txt
+echo 'All Controllers w/ Data ONTAP Version Report (by OS Version)' > $outfile
+dt_stamp=`date`
+echo -e "Generated on ${dt_stamp}\n" >> $outfile
+dfm report view -s 'OS Version' controllers-releases 2>&1 | cut -b 11- >> $outfile
+
+outfile="$rpt_path"/volumes.txt
+echo 'Volumes Report' > $outfile
+dt_stamp=`date`
+echo -e "Generated on ${dt_stamp}\n" >> $outfile
+dfm report view volumes 2>&1 | cut -b 11- >> $outfile
+
+outfile="$rpt_path"/luns.txt
+echo 'LUNs Report' > $outfile
+dt_stamp=`date`
+echo -e "Generated on ${dt_stamp}\n" >> $outfile
+dfm report view luns-all 2>&1 | cut -b 11- >> $outfile
+
+outfile="$rpt_path"/volume-top-utilization.txt
+echo 'Top 30 Volume Utilization Report' > $outfile
+dt_stamp=`date`
+echo -e "Generated on ${dt_stamp}\n" >> $outfile
+dfm report view -l 30 -s 'used %' yp_volumes-capacity 2>&1 >> $outfile
+
+outfile="$rpt_path"/storage-system-performance-summary-cpu.txt
+echo 'Storage Systems Performance Summary Report (by CPU Busy) - Past 1 Day' > \
+  $outfile
+dt_stamp=`date`
+echo -e "Generated on ${dt_stamp}\n" >> $outfile
+dfm report view -P 1d -l 30 -s 'CPU Busy (%)' storage-system-performance-summary 2>&1 | \
+  cut -b 11- >> $outfile
+
+outfile="$rpt_path"/storage-system-performance-summary-iops.txt
+echo 'Storage Systems Performance Summary Report (by IOPS) - Past 1 Day' > $outfile
+dt_stamp=`date`
+echo -e "Generated on ${dt_stamp}\n" >> $outfile
+dfm report view -P 1d -l 30 -s 'Total Ops/Sec' storage-system-performance-summary 2>&1 | \
+  cut -b 11- >> $outfile
+
+outfile="$rpt_path"/storage-system-NAS-performance-summary.txt
+echo 'Storage Systems NAS Performance Summary Report (by NFS Ops) - Past 1 Day' > \
+  $outfile
+dt_stamp=`date`
+echo -e "Generated on ${dt_stamp}\n" >> $outfile
+dfm report view -P 1d -l 30 -s 'NFS Ops/Sec' storage-system-NAS-performance-summary 2>&1 | \
+  cut -b 11- >> $outfile
+
+outfile="$rpt_path"/storage-system-SAN-performance-summary-iscsi.txt
+echo 'Storage Systems SAN Performance Summary Report (by iSCSI Ops) - Past 1 Day' > \
+  $outfile
+dt_stamp=`date`
+echo -e "Generated on ${dt_stamp}\n" >> $outfile
+dfm report view -P 1d -l 30 -s 'iSCSI Ops/Sec' storage-system-SAN-performance-summary 2>&1 | \
+  cut -b 11- >> $outfile
+
+outfile="$rpt_path"/storage-system-SAN-performance-summary-fcp.txt
+echo 'Storage Systems SAN Performance Summary Report (by FCP Ops) - Past 1 Day' > \
+  $outfile
+dt_stamp=`date`
+echo -e "Generated on ${dt_stamp}\n" >> $outfile
+dfm report view -P 1d -l 15 -s 'FCP Ops/Sec' storage-system-SAN-performance-summary 2>&1 | \
+  cut -b 11- >> $outfile
+
+outfile="$rpt_path"/volumes-performance-summary.txt
+echo 'Volumes Performance Summary Report (by Total Ops/Sec) - Past 1 Day' > $outfile
+dt_stamp=`date`
+echo -e "Generated on ${dt_stamp}\n" >> $outfile
+dfm report view -P 1d -l 30 -s 'Total Ops/Sec' volumes-performance-summary 2>&1 | \
+  cut -b 11- >> $outfile
+
+outfile="$rpt_path"/volumes-NAS-performance-summary-nfs.txt
+echo 'Volumes NAS Performance Summary Report (by NFS Ops) - Past 1 Day' > $outfile
+dt_stamp=`date`
+echo -e "Generated on ${dt_stamp}\n" >> $outfile
+dfm report view -P 1d -l 30 -s 'NFS Ops/Sec' volumes-NAS-performance-summary 2>&1 | \
+  cut -b 11- >> $outfile
+
+outfile="$rpt_path"/volumes-NAS-performance-summary-cifs.txt
+echo 'Volumes NAS Performance Summary Report (by CIFS Ops) - Past 1 Day' > $outfile
+dt_stamp=`date`
+echo -e "Generated on ${dt_stamp}\n" >> $outfile
+dfm report view -P 1d -l 15 -s 'CIFS Ops/Sec' volumes-NAS-performance-summary 2>&1 | \
+  cut -b 11- >> $outfile
+
+outfile="$rpt_path"/volumes-SAN-performance-summary.txt
+echo 'Volumes SAN Performance Summary Report (by SAN Ops) - Past 1 Day' > $outfile
+dt_stamp=`date`
+echo -e "Generated on ${dt_stamp}\n" >> $outfile
+dfm report view -P 1d -l 30 -s 'SAN Total Ops/Sec' volumes-SAN-performance-summary 2>&1 | \
+  cut -b 11- >> $outfile
+
+outfile="$rpt_path"/luns-statistics.txt
+echo 'LUNs Statistics Report (by Operations/Sec) - Past 1 Day' > $outfile
+dt_stamp=`date`
+echo -e "Generated on ${dt_stamp}\n" >> $outfile
+dfm report view -P 1d -s 'Operations/Sec' -l 30 luns-statistics 2>&1 | \
+  cut -b 11- >> $outfile
+
+outfile="$rpt_path"/yp_snapshots.txt
+echo 'Snapshot Policy Report (snapshot-enbled only)' > $outfile
+dt_stamp=`date`
+echo -e "Generated on ${dt_stamp}\n" >> $outfile
+dfm report view yp_snapshots | sed -n -e '1,2 p' -e '/On/ p' >> $outfile
+
+tmpfile=/tmp/storage-systems-capacity.txt
+outfile="$rpt_path"/storage-systems-capacity.txt
+echo 'Storage Systems Capacity Report (by Used (%)) - Past 1 Day' > $tmpfile
+dt_stamp=`date`
+echo -e "Generated on ${dt_stamp}\n" >> $tmpfile
+dfm report view -s 'Used (%)' -P 1d storage-systems-capacity 2>&1 | \
+  cut -b 11- >> $tmpfile
+sed -i '/Storage\ System\ \ \ /{
+  s/Used\ \ \ \ \ /Used\ (TB)/
+  s/Total\ \ \ \ \ /Total\ (TB)/}' $tmpfile
+awk '
+   ($1 !~ /netapp/ && $1 !~ /[1-9]/) { print $0 }
+   $1 ~ /netapp/ { printf("%-33s %12.3f %12.3f %8.1f\n", $1, $2/1024**3, $3/1024**3, $NF) } 
+END { 
+  printf("%-33s %12.3f %12.3f %8.1f\n", "Total", $1/1024**3, $2/1024**3, $NF) 
+}' $tmpfile > $outfile
+rm -f $tmpfile
+
+# reports for StoraGenie
+outfile="$rpt_path"/controllers_4SG.txt
+dfm report view -F csv controllers 2>&1 | sed -e '1 d' -e '/Totals/ d' \
+-e 's/^.*Normal,//' -e 's/,,/,/' > $outfile
+
+outfile="$rpt_path"/controllers-releases_4SG.txt
+dfm report view -F csv -s 'OS Version' controllers-releases 2>&1 | \
+sed -e '1 d' -e '/Totals/ d' -e 's/^.*Normal,//' -e 's/,,$//' > $outfile
+
+outfile="$rpt_path"/volumes-capacity_4SG.txt
+dfm report view -F csv volumes-capacity 2>&1 | \
+sed -e '1 d' -e '/Totals/ d' -e 's/^[0-9]*,//' > $outfile
+

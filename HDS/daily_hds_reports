@@ -1,0 +1,364 @@
+#!/bin/bash
+
+# == Synopsis
+#
+# This is a BASH script to generate basic reports from HDS HNAS and HDS Gx00
+# storage systems.  HNAS access is conducted via HDS SSC utility.  HDS RAIDCOM
+# is required for accessing the HDS Gx00 so this script should be executed on
+# the system(s) with RAIDCOM installed and configured.
+#
+#
+# == Author
+# Friendly half-blind Lead Storage/Systems Administrator with smiles
+#
+# $Id: daily_hds_reports 10975 2018-03-20 01:00:22Z fma $
+
+PATH=/bin:/usr/bin
+
+# variables
+SSC_BIN='<path>/ssc'
+rpt_path='/var/www/html/hds_reports'
+logrotate_bin=/usr/sbin/logrotate
+irvprdevs='irv4100-adminevs.<domain>'
+irvnonprdevs='irv4060-adminevs.<domain>'
+ashprdevs='ash4060-adminevs.<domain>'
+ashnonprdevs='ash4060np-adminevs.<domain>'
+INST=0
+site=''
+CMD=''
+rotate_log=true
+storage_system=''
+
+
+#functions
+sendemail ()
+{
+   echo "$msg" | mutt -s "$0 from $(hostname)" <recipient_email_address>
+}
+
+show_help ()
+{
+   echo -e "\n${0} [-h] [-n] [-s vsp|nas]"
+   echo -e "\nwhere:"
+   echo -e "\t-h\tthis help"
+   echo -e "\t-s\tcollect data from either VSP or NAS"
+   echo -e "\t-n\tdo not rotate log files\n"
+}
+
+# parse options
+while getopts ":nhs:" opt ; do
+   case $opt in
+      h)
+         show_help
+         exit 2
+         ;;
+      n)
+         rotate_log=false
+         ;;
+      s)
+         storage_system=$(echo $OPTARG | tr [:upper:] [:lower:])
+         ;;
+      \?)
+         echo "Invalid option: -${OPTARG}" >&2
+         show_help
+         exit 1
+         ;;
+      :)
+         echo "Option -$OPTARG requires an argument." >&2
+         show_help
+         exit 1
+         ;;
+      *)
+         show_help
+         exit 2
+         ;;
+   esac
+done
+
+# rotate existing files
+if [[ $rotate_log == true ]] ; then
+   if [ -x $logrotate_bin ] ; then
+      $logrotate_bin -f /root/etc/daily_reports.logrotate >/dev/null 2>&1
+      EXITVALUE=$?
+      if [ $EXITVALUE != 0 ] ; then
+         logger -t logrotate "ALERT - $0 exited abnormally with [$EXITVALUE]"
+         exit $EXITVALUE
+      fi
+   else
+      echo "The logrotate binary is not in /usr/sbin or executable."
+      exit 1
+   fi
+fi
+
+#
+# HNAS reports
+#
+if [[ $storage_system != 'vsp' ]] ; then
+   for i in $irvprdevs $irvnonprdevs $ashprdevs $ashnonprdevs ; do
+      # all nfs export information
+      outfile="${rpt_path}/nfs-exports_${i}.txt"
+      dt_stamp=`date -R`
+      echo "NFS-Export Entries Report - ${i}" > "$outfile"
+      echo "Generated on ${dt_stamp}" >> "$outfile"
+      $SSC_BIN -u <username> -E ~/.hash_file_4_evs "$i" \
+'for-each-evs nfs-export list' 2>&1 | sed -n -e '/EVS/ i\\n\n==================' \
+-e '/EVS/ p' -e '/EVS/ a\==================' -e '/Export\ name/ p' \
+-e '/Export\ configuration/,/^\ *$/ p' -e '/No\ exports/ p' \
+-e '/No\ exports/ a\\n' >> "$outfile"
+   
+      # all nfs export information 4SG
+      outfile="${rpt_path}/nfs-exports_${i}_4SG.txt"
+      $SSC_BIN -u <username> -E ~/.hash_file_4_evs "$i" \
+'for-each-evs nfs-export list' 2>&1 | sed -n -e '/Export\ name/,+2 p' \
+-e '/Export\ configuration/,/^\ *$/ p' | \
+perl -p -e '/Export\ configuration/ && s/:\n/: / ; s/\)\n/),/' | \
+sed 's/,$//' > "$outfile"
+
+      # all evs
+      outfile="${rpt_path}/EVS_List_${i}.txt"
+      dt_stamp=`date -R`
+      echo "EVS Report - ${i}" > "$outfile"
+      echo "Generated on ${dt_stamp}" >> "$outfile"
+      $SSC_BIN -u <username> -E ~/.hash_file_4_evs "$i" 'evs list' 2>&1 | \
+sed '/Cluster/ i\ ' >> "$outfile"
+   
+      # all quotas
+      outfile="${rpt_path}/quotas_${i}.txt"
+      dt_stamp=`date -R`
+      echo "Quotas Report - ${i}" > "$outfile"
+      echo "Generated on ${dt_stamp}" >> "$outfile"
+      CMD="for-each-evs for-each-fs for-each-vivol ssrun \
+-c 'quota list \"\$FS_LABEL\" \"\$VIVOL_LABEL\"'"
+      $SSC_BIN -u <username> -E ~/.hash_file_4_evs "$i" "$CMD" 2>&1 | \
+sed -e '/EVS/ i\\n\n==================' -e '/EVS/ a\==================' \
+-e '/\ \ Warning/,/^\ *$/ d' | \
+awk '{ if (/Executing/ && ! /Executing\ on\ vivol/) print "" ; print $0 }' \
+>> "$outfile"
+   
+      # all vi-vols
+      outfile="${rpt_path}/vi-vols_${i}.txt"
+      dt_stamp=`date -R`
+      echo "Virtual Volumes Report - ${i}" > "$outfile"
+      echo "Generated on ${dt_stamp}" >> "$outfile"
+      CMD="for-each-evs for-each-fs ssrun \
+-c 'virtual-volume list --verbose \"\$FS_LABEL\"'"
+      $SSC_BIN -u <username> -E ~/.hash_file_4_evs "$i" "$CMD" 2>&1 | \
+sed -e '/EVS/ i\\n\n==================' -e '/EVS/ a\==================' \
+-e '/Executing/ i\ ' >> "$outfile"
+   
+      # all directories
+      outfile="${rpt_path}/directories_${i}.txt"
+      dt_stamp=`date -R`
+      echo "File Systems Directories Report - ${i}" > "$outfile"
+      echo "Generated on ${dt_stamp}" >> "$outfile"
+      CMD="for-each-evs for-each-fs ssrun \
+-c 'selectfs \"\$FS_LABEL\" ; ls -l \"\$FS_LABEL\"'"
+      $SSC_BIN -u <username> -E ~/.hash_file_4_evs "$i" "$CMD" 2>&1 | \
+sed -e '/EVS/ i\\n\n==================' -e '/EVS/ a\==================' \
+-e '/Executing/ i\ ' >> "$outfile"
+   
+      # all file systems
+      outfile="${rpt_path}/filesystem-list_${i}.txt"
+      dt_stamp=`date -R`
+      echo "File Systems Report - ${i}" > "$outfile"
+      echo -e "Generated on ${dt_stamp}" >> "$outfile"
+      CMD="for-each-evs filesystem-list"
+      $SSC_BIN -u <username> -E ~/.hash_file_4_evs "$i" "$CMD" 2>&1 | \
+sed -e '/EVS\ [1-9]/ i\\n\n==================' -e '/EVS\ [1-9]/ a\==================' \
+-e '/[0-9]\ *$/ a\ ' >> "$outfile"
+      awk -f /root/etc/fss_total.awk "$outfile" >> "$outfile"
+   
+      # all file systems 4SG
+      outfile="${rpt_path}/filesystem-list_${i}_4SG.txt"
+      CMD="filesystem-list"
+      $SSC_BIN -u <username> -E ~/.hash_file_4_evs "$i" "$CMD" 2>&1 | \
+grep -v 'Tier\ 0' | perl -p -e 's/Below.*\n// ; /Filesystem/ && s/:\n/ / ; \
+s/Tier.*confined\ to\ *//' | sed -e '1,2 d' | \
+perl -p -e '/Filesystem/ && s/(\w|-)+\.\.(\w|-)+\ // ; \
+/Filesystem/ && s/Filesystem\ //' | sed -e 's/\  */,/g' -e 's/,$//' > "$outfile"
+   
+      # all snapshot rules
+      outfile="${rpt_path}/snapshot-rule-list_${i}.txt"
+      dt_stamp=`date -R`
+      echo "Snapshot Rules Report - ${i}" > "$outfile"
+      echo -e "Generated on ${dt_stamp}" >> "$outfile"
+      CMD="for-each-evs snapshot-rule-list"
+      $SSC_BIN -u <username> -E ~/.hash_file_4_evs "$i" "$CMD" 2>&1 | \
+sed -e '/EVS/ i\\n\n==================' -e '/EVS/ a\==================' \
+-e '/Executing/ i\ ' >> "$outfile"
+   
+      # all snapshots
+      outfile="${rpt_path}/snapshot-list_${i}.txt"
+      dt_stamp=`date -R`
+      echo "Snapshots Report - ${i}" > "$outfile"
+      echo -e "Generated on ${dt_stamp}" >> "$outfile"
+      CMD="for-each-evs for-each-fs ssrun -c 'snapshot-list --file-system \"\$FS_LABEL\"'"
+      $SSC_BIN -u <username> -E ~/.hash_file_4_evs "$i" "$CMD" 2>&1 | \
+sed -e '/EVS/ i\\n\n==================' -e '/EVS/ a\==================' \
+-e '/Executing/ i\ ' >> "$outfile"
+   
+      # all crontabs
+      outfile="${rpt_path}/crontab-list_${i}.txt"
+      dt_stamp=`date -R`
+      echo "Crontab Report - ${i}" > "$outfile"
+      echo -e "Generated on ${dt_stamp}" >> "$outfile"
+      CMD="crontab list"
+      $SSC_BIN -u <username> -E ~/.hash_file_4_evs "$i" "$CMD" 2>&1 >> "$outfile"
+   
+      # all cluster-show reports
+      outfile="${rpt_path}/cluster-show_${i}.txt"
+      dt_stamp=$(date -R)
+      echo "Cluster Information Report - ${i}" > "$outfile"
+      echo -e "Generated on ${dt_stamp}" >> "$outfile"
+      CMD="cn all cluster-show"
+      echo -e "\n========\n${CMD}\n========" >> "$outfile"
+      $SSC_BIN -u <username> -E ~/.hash_file_4_evs "$i" "$CMD" 2>&1 >> "$outfile"
+      CMD="cluster-show -q"
+      echo -e "\n========\n${CMD}\n========" >> "$outfile"
+      $SSC_BIN -u <username> -E ~/.hash_file_4_evs "$i" "$CMD" 2>&1 >> "$outfile"
+      CMD="cluster-show -y"
+      echo -e "\n========\n${CMD}\n========" >> "$outfile"
+      $SSC_BIN -u <username> -E ~/.hash_file_4_evs "$i" "$CMD" 2>&1 >> "$outfile"
+      CMD="cluster-show -v"
+      echo -e "\n========\n${CMD}\n========" >> "$outfile"
+      $SSC_BIN -u <username> -E ~/.hash_file_4_evs "$i" "$CMD" 2>&1 >> "$outfile"
+   
+      # all FC reports
+      outfile="${rpt_path}/fc-info_${i}.txt"
+      dt_stamp=$(date -R)
+      echo "Fiber Channel Report - ${i}" > "$outfile"
+      echo -e "Generated on ${dt_stamp}" >> "$outfile"
+      CMD="cn all fc-stats -a"
+      echo -e "\n========\n${CMD}\n========" >> "$outfile"
+      $SSC_BIN -u <username> -E ~/.hash_file_4_evs "$i" "$CMD" 2>&1 >> "$outfile"
+      CMD="cn all fc-link-status"
+      echo -e "\n========\n${CMD}\n========" >> "$outfile"
+      $SSC_BIN -u <username> -E ~/.hash_file_4_evs "$i" "$CMD" 2>&1 >> "$outfile"
+      CMD="cn all fc-host-port-load -v"
+      echo -e "\n========\n${CMD}\n========" >> "$outfile"
+      $SSC_BIN -u <username> -E ~/.hash_file_4_evs "$i" "$CMD" 2>&1 >> "$outfile"
+      CMD="cn all fc-target-port-load -v"
+      echo -e "\n========\n${CMD}\n========" >> "$outfile"
+      $SSC_BIN -u <username> -E ~/.hash_file_4_evs "$i" "$CMD" 2>&1 >> "$outfile"
+      CMD="cn all fc-hports"
+      echo -e "\n========\n${CMD}\n========" >> "$outfile"
+      $SSC_BIN -u <username> -E ~/.hash_file_4_evs "$i" "$CMD" 2>&1 >> "$outfile"
+   
+      # all file system performance statistics reports
+      outfile="${rpt_path}/fs-perf-stats_${i}.txt"
+      dt_stamp=$(date -R)
+      echo "File Systems Performance Statistics Report - ${i}" > "$outfile"
+      echo -e "Generated on ${dt_stamp}" >> "$outfile"
+      CMD="cn all fs-perf-stats --by-fs"
+      echo -e "\n========\n${CMD}\n========" >> "$outfile"
+      $SSC_BIN -u <username> -E ~/.hash_file_4_evs "$i" "$CMD" 2>&1 | \
+sed '/TOTAL/ a\ ' | awk -f /root/etc/fs-perf-stats_tot.awk >> "$outfile"
+   
+      # nfs statistics reports
+      outfile="${rpt_path}/nfs-stats_${i}.txt"
+      dt_stamp=$(date -R)
+      echo "NFS Statistics Report - ${i}" > "$outfile"
+      echo -e "Generated on ${dt_stamp}" >> "$outfile"
+      CMD="cn all nfs-stats"
+      echo -e "\n========\n${CMD}\n========" >> "$outfile"
+      $SSC_BIN -u <username> -E ~/.hash_file_4_evs "$i" "$CMD" 2>&1 >> "$outfile"
+   
+      # newest 20 events
+      outfile="${rpt_path}/cluster_events_${i}.txt"
+      dt_stamp=$(date -R)
+      echo "Cluster Events Report (newest 20) - ${i}" > "$outfile"
+      echo -e "Generated on ${dt_stamp}" >> "$outfile"
+      CMD="cn all event-log-show --all --max-events 20"
+      echo -e "\n========\n${CMD}\n========" >> "$outfile"
+      $SSC_BIN -u <username> -E ~/.hash_file_4_evs "$i" "$CMD" 2>&1 | \
+sed '/Cluster\ node/ i\ ' >> "$outfile"
+   done
+
+   # all NAS allocation & consumption
+   outfile="${rpt_path}/nas-allocation-consumption.txt"
+   dt_stamp=`date -R`
+   echo "NAS Allocaiton & Consumption Report" > "$outfile"
+   echo -e "Generated on ${dt_stamp}" >> "$outfile"
+   for s in ash irv ; do
+      if [[ "$s" == 'ash' ]] ; then
+         echo -e "\n=============\nAshburn, VA\n============="
+      elif [[ "$s" == 'irv' ]] ; then
+         echo -e "\n=============\nIrvine, CA\n============="
+      else
+         echo -e "\n=============\nUnknown Site\n============="
+      fi >> "$outfile"
+      for f in $(ls -1d "$rpt_path"/filesystem-list_${s}* | grep -v 4SG) ; do
+         admevs=$(echo "$f" | awk -F'_' '{ print $NF }' | sed 's/-adminevs.*$//')
+         echo -e "${admevs}\n~~~~~~~~~~"
+         sed -n '/Not\ NAS-tiered/,/^\ *$/ p' "$f"
+      done | awk -f /root/etc/nas_total.awk >> "$outfile"
+   done
+fi
+
+
+#
+# VSP reports
+#
+if [[ $storage_system != 'nas' ]] ; then
+   if [[ $(hostname) =~ wc1 ]] ; then
+      site='Irvine, CA'
+   elif [[ $(hostname) =~ ev1 ]] ; then
+      site='Ashburn, VA'
+   else
+      msg="$(hostname) cannot figure out site information while generating HDS reports."
+      sendemail
+      exit 1
+   fi
+   INST=$(ls -1 /etc/horcm*.conf | sort -rV | head -1 | sed -e 's/^.*horcm//' -e 's/\.conf//')
+   if [ x$INST == x ] ; then
+      msg="$(hostname) cannot figure out instance number while generating HDS reports."
+      sendemail
+      exit 1
+   fi
+   
+   outfile="${rpt_path}/vsp_all_ports.txt"
+   dt_stamp=`date -R`
+   echo "All Ports Report - ${site}" > "$outfile"
+   echo -e "Generated on ${dt_stamp}\n" >> "$outfile"
+   raidcom get port -IH"$INST" >> "$outfile"
+   
+   tmpfile1="/tmp/pool_name.txt"
+   raidcom get pool -key opt -IH"$INST" > "$tmpfile1"
+   tmpfile2="/tmp/pool_cap.txt"
+   dt_stamp=`date -R`
+   echo "All Pools Report - ${site}" > "$tmpfile2"
+   echo -e "Generated on ${dt_stamp}\n" >> "$tmpfile2"
+   raidcom get pool -IH"$INST" >> "$tmpfile2"
+   outfile="${rpt_path}/vsp_all_pools.txt"
+   awk -f /root/etc/all_pools.awk "$tmpfile2" > "$outfile"
+   rm -f "$tmpfile1" "$tmpfile2"
+   
+   outfile="${rpt_path}/vsp_all_fc_host_grp.txt"
+   dt_stamp=`date -R`
+   echo "All Fibre Channel Host Groups Report - ${site}" > "$outfile"
+   echo -e "Generated on ${dt_stamp}\n" >> "$outfile"
+   raidcom get host_grp -allports -IH"$INST" | grep -v -P "CL(\d)-[AB]" >> "$outfile"
+   
+   outfile="${rpt_path}/vsp_all_iscsi_host_grp.txt"
+   dt_stamp=`date -R`
+   echo "All iSCSI Host Groups Report - ${site}" > "$outfile"
+   echo -e "Generated on ${dt_stamp}\n" >> "$outfile"
+   printf "%-8s  %-35s  %-10s  %-10s  %-s\n" \
+'Port' 'Host Group' 'HMD' 'HMO_BITs' 'iSCSI Target ID' >> "$outfile"
+   printf "%-8s  %-35s  %-10s  %-10s  %-s\n" \
+'~~~~~~' '~~~~~~~~~~~~~' '~~~~~~~~' '~~~~~~~~~~' '~~~~~~~~~~~~~~~~~~' >> "$outfile"
+   for i in 1 2 3 4 ; do
+      for j in a b ; do
+         raidcom get host_grp -port "cl${i}-${j}" -IH"$INST" | sed '/IQN/ d' | \
+awk '{ printf("%-8s  %-35s  %-10s  %-11s  %-s\n", \
+$1, $3, $8, $9" "$10" "$11" "$12" "$13, $4) }' >> "$outfile"
+      done
+   done
+   
+   outfile="${rpt_path}/vsp_all_parity_grp.txt"
+   dt_stamp=`date -R`
+   echo "All Parity Groups Report - ${site}" > "$outfile"
+   echo -e "Generated on ${dt_stamp}\n" >> "$outfile"
+   raidcom get parity_grp -IH"$INST" >> "$outfile"
+fi
+

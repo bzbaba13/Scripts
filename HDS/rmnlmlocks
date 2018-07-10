@@ -1,0 +1,208 @@
+#!/bin/bash
+
+# == Synopsis
+#
+# This script removes existing NLM locks typically left behind after an Oracle
+# DBMS did not get shut down gracefully.
+#
+#
+# == Author
+# Friendly half-blind Lead Storage/Systems Administrator with smiles
+#
+# $Id: newfilesystem 9729 2016-07-18 23:33:58Z fma $
+
+PATH=/bin:/usr/bin:/sbin
+
+retval=9
+evs_name='no_evs'
+SSC_BIN=<path>/ssc
+hash_file='no_hash_file'
+read_reply='n'
+msg=''
+username='no_username'
+interactive='y'
+
+declare -a ip_array
+declare -a evs_array
+declare -A adminevs_array
+
+
+# functions
+bail_out ()
+{
+   echo -e "\n${msg}\n"
+   exit 1
+}
+
+gather_ip ()
+{
+   case $interactive in 
+   y)
+      echo -e "For IP address(es) of NFS client, please execute the following \
+multi-line commands on the NFS client,"
+      echo -e "\n   echo ; echo \$( /sbin/ifconfig | grep 'inet\ ' | \\"
+      echo -e "   egrep '10.[13]|192.168.168' | awk '{ print \$2 }' | \\"
+      echo -e "   awk -F ':' '{ print \$NF }' ) ; echo"
+      echo -e "\nand copy/paste the result below:"
+      read -a ip_array
+      ;;
+   n)
+      ip_array=( $( ifconfig | grep 'inet\ ' | egrep '10.[13]|192.168.168' | \
+awk '{ print $2 }' | awk -F ':' '{ print $NF }' ) )
+      ;;
+   esac
+}
+
+gather_evs ()
+{
+   case $interactive in
+   y)
+      echo -e "\nFor EVS information, please execute the following multi-line \
+commands on the NFS client system," 
+      echo -e "\n   echo \$( mount | grep nfs | grep 'evs-' | awk -F'.' '{ print \$1 }' | \\"
+      echo -e "   sort | uniq ) ; echo"
+      echo -e "\nand copy/paste the output below:"
+      read -a evs_array
+      ;;
+   n)
+      evs_array=( $( mount | grep nfs | grep 'evs-' | awk -F '.' '{ print $1 }' | \
+sort | uniq ) )
+      ;;
+   esac
+}
+
+identify_adminevs ()
+{
+   for i in ${evs_array[*]} ; do
+      if [[ $i =~ ash ]] ; then
+         if [[ $i =~ prd ]] ; then
+            adminevs_array[$i]='ash4060-adminevs.<domain>'
+         elif [[ $i =~ dev || $i =~ qa || $i =~ stg ]] ; then
+            # until all non-prod file systems are migrated to the non-prod cluster
+            # both clusters need to have removal executed
+            adminevs_array[$i]='ash4060-adminevs.<domain> ash4060np-adminevs.ev1.yellowpages.com'
+         else
+            msg="CRITICAL: Failed to identify the name of the Admin EVS.  Abort."
+            bail_out
+         fi
+      elif [[ $i =~ irv ]] ; then
+         if [[ $i =~ prd || $i =~ datadb ]] ; then
+            adminevs_array[$i]='irv4100-adminevs.<domain>'
+         elif [[ $i =~ dev || $i =~ qa || $i =~ stg ]] ; then
+            adminevs_array[$i]='irv4060-adminevs.<domain>'
+         else
+            msg="CRITICAL: Failed to identify the name of the Admin EVS.  Abort."
+            bail_out
+         fi
+      else
+         msg="CRITICAL: Failed to identify the name of the Admin EVS.  Abort."
+         bail_out
+      fi
+   done
+}
+
+remove_nlm_lock ()
+{
+   echo -e "\tRemoving NLM lock associated to IP address of ${myip} serviced \
+by ${myevs}"
+   retval=9
+   $SSC_BIN -u "$username" -E "$hash_file" "$adminevs" \
+"evs-select ${myevs} lockd-client -u ${myip}" 2>&1
+   retval=$?
+}
+
+show_help ()
+{
+   echo "${0} -u <HNAS user name> -e <HNAS hash file> [-l]"
+   echo
+   echo "where:"
+   echo -e "\t-e  File (including full path) containing hash for HDS SSC utility."
+   echo -e "\t\te.g., /oracle/src/DBA/oracle/hds/oraclesvc_hash"
+   echo -e "\t-u  Name of account for HDS SSC utility."
+   echo -e "\t-l  Use information on local server."
+   echo
+}
+
+
+# parse options
+while getopts ":e:hlu:" opt ; do
+   case $opt in
+      h)
+         show_help
+         exit 2
+         ;;
+      e)
+         hash_file="$OPTARG"
+         ;;
+      l)
+         interactive='n'
+         ;;
+      u)
+         username="$OPTARG"
+         ;;
+      \?)
+         echo "Invalid option: -${OPTARG}" >&2
+         show_help
+         exit 1
+         ;;
+      :)
+         echo "Option -$OPTARG requires an argument." >&2
+         show_help
+         exit 1
+         ;;
+      *)
+         show_help
+         exit 2
+         ;;
+   esac
+done
+
+
+# main logic
+if [[ x$username != x && -r $hash_file && ! -d $hash_file && -x $SSC_BIN ]] ; then
+   gather_ip
+   if [[ x${ip_array[0]} == x ]] ; then
+      echo -e "No IP address(es) was/were provided.  Please try again."
+      gather_ip
+      if [[ x${ip_array[0]} == x ]] ; then
+         msg="Still no IP address(es) entered.  Abort."
+         bail_out
+      fi
+   fi
+   gather_evs
+      if [[ x${evs_array[0]} == x ]] ; then
+         echo -e "No NFS mount information provided.  Please try again."
+         gather_evs
+         if [[ x${evs_array[0]} == x ]] ; then
+            msg="Still no NFS mount information provided.  Abort."
+            bail_out
+         fi
+      fi
+   identify_adminevs
+   echo -e "\nReady to perform the following:"
+   echo -e "\tEstablish connection via SSC to the following Admin EVS:"
+   echo -e "\t\t${adminevs_array[*]}"
+   echo -e "\tto remove NLM lock associated to the following IP address(es):"
+   echo -e "\t\t${ip_array[*]}"
+   echo -e "\tusing account of '${username}' and hash file of '${hash_file}'"
+   echo -e "\tserviced by EVS named '${evs_array[*]}'.\n"
+   read -t 10 -p 'Do you want to continue (y|N)? ' read_reply
+   if [[ $( echo "$read_reply" | tr [:upper:] [:lower:] ) != 'y' || $? -gt 128 ]] ; then
+      msg="Abort."
+      bail_out
+   else
+      for i in $( seq 0 $(( ${#ip_array[*]} - 1 )) ) ; do
+         myip=${ip_array[$i]}
+         for myevs in ${evs_array[*]} ; do
+            for adminevs in ${adminevs_array[*]} ; do
+               remove_nlm_lock
+            done
+         done
+      done
+   fi
+else
+   echo -e "\nCRITICAL: Either the hash file of '${hash_file}', account of '${username}',"
+   echo -e "\t  and/or the SSC utility '${SSC_BIN}' is/are not available/valid.\n"
+   show_help
+   exit 2
+fi
