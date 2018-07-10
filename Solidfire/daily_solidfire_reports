@@ -6,8 +6,8 @@
 # in JSON format.  The output files will then be further processed to generate
 # output via ruby.
 #
-# curl --basic -u storageadmins_reporting:re@d0nly --data @{json_construct} --output {outfile} https://10-1-144-210.ip.solidfire.net/json-rpc/{os_version}
-# curl --basic -u storageadmins_reporting:re@d0nly --data @{json_constrcut} --output {outfile} https://10-3-146-150.ip.solidfire.net/json-rpc/{os_version}
+# curl --basic -u <username>:<password> --data @{json_construct} --output {outfile} https://10-1-144-210.ip.solidfire.net/json-rpc/{os_version}
+# curl --basic -u <username>:<password> --data @{json_constrcut} --output {outfile} https://10-3-146-150.ip.solidfire.net/json-rpc/{os_version}
 #
 #
 # == Author

@@ -102,7 +102,7 @@ identify_admin_node ()
 fetch_span ()
 {
    retval=9
-   msg=$($SSC_BIN -u storageadmin -E "$HASH_FILE" "$adm_node" 'span-list' 2>&1)
+   msg=$($SSC_BIN -u <username> -E "$HASH_FILE" "$adm_node" 'span-list' 2>&1)
    retval=$?
 }
 
@@ -120,7 +120,7 @@ request_fs_name ()
 
 fetch_all_fs ()
 {
-   msg=$( $SSC_BIN -u storageadmin -E "$HASH_FILE" "$adm_node" \
+   msg=$( $SSC_BIN -u <username> -E "$HASH_FILE" "$adm_node" \
 'filesystem-list' 2>&1 )
 
    echo "$msg" | sed '/Tier/ d'
@@ -129,7 +129,7 @@ fetch_all_fs ()
 check_fs_name ()
 {
    retval=9
-   msg=$( $SSC_BIN -u storageadmin -E "$HASH_FILE" "$adm_node" \
+   msg=$( $SSC_BIN -u <username> -E "$HASH_FILE" "$adm_node" \
 "filesystem-list ${fs_name}" 2>&1 )
 
    retval=$?
@@ -145,7 +145,7 @@ request_fs_size ()
 fetch_evs ()
 {
    retval=9
-   msg=$($SSC_BIN -u storageadmin -E "$HASH_FILE" "$adm_node" 'evs list' | \
+   msg=$($SSC_BIN -u <username> -E "$HASH_FILE" "$adm_node" 'evs list' | \
      sed -n -e '2,3 p' -e '/Service/ p' 2>&1)
 
    retval=$?
@@ -184,7 +184,7 @@ check_export_entries ()
 {
    retval=9
    for i in $( seq 0 $(( ${#dirs_array[*]} - 1 )) ) ; do
-      msg=$( $SSC_BIN -u storageadmin -E "$HASH_FILE" "$adm_node" \
+      msg=$( $SSC_BIN -u <username> -E "$HASH_FILE" "$adm_node" \
 "evs-select ${evs_name} nfs-export list /${fs_name}/${dirs_array[i]}" 2>&1 )
 
       if [[ $? -eq 0 ]] ; then
@@ -200,7 +200,7 @@ create_filesystem ()
 {
    retval=9
    echo -e "\nCreating file system ${fs_name}..."
-   msg=$($SSC_BIN -u storageadmin -E "$HASH_FILE" "$adm_node" \
+   msg=$($SSC_BIN -u <username> -E "$HASH_FILE" "$adm_node" \
 "evs-select ${evs_name} filesystem-create -b ${blk_size} ${span_name} ${fs_name} 1 ${fs_size}" 2>&1)
 
    retval=$?
@@ -210,7 +210,7 @@ enable_thin_provision ()
 {
    retval=9
    echo -e "\nEnabling thin provisioning on file system '${fs_name}'..."
-   msg=$($SSC_BIN -u storageadmin -E "$HASH_FILE" "$adm_node" \
+   msg=$($SSC_BIN -u <username> -E "$HASH_FILE" "$adm_node" \
      "filesystem-thin ${fs_name} on" 2>&1)
 
    retval=$?
@@ -236,7 +236,7 @@ create_exports ()
    echo -e "\nCreating export directory/ies..."
    for i in $( seq 0 $(( ${#dirs_array[*]} - 1 )) ) ; do
       echo -e "\t/${fs_name}/${dirs_array[i]}"
-      msg=$( $SSC_BIN -u storageadmin -E "$HASH_FILE" "$adm_node" \
+      msg=$( $SSC_BIN -u <username> -E "$HASH_FILE" "$adm_node" \
 "evs-select ${evs_name} nfs-export add -c '${nfs_clients}' \
 /${fs_name}/${dirs_array[i]} ${fs_name} /${fs_name}/${dirs_array[i]}" 2>&1 )
 
@@ -252,7 +252,7 @@ create_exports ()
 add_quota ()
 {
    echo -e "\t\tAdding quota to /${fs_name}/${dirs_array[i]}..."
-   msg=$( $SSC_BIN -u storageadmin -E "$HASH_FILE" "$adm_node" \
+   msg=$( $SSC_BIN -u <username> -E "$HASH_FILE" "$adm_node" \
 "evs-select ${evs_name} quota add --usage-limit ${quotas_array[i]} \
 --usage-critical 92 --usage-reset 85 \
 ${fs_name} /${fs_name}/${dirs_array[i]}" 2>&1 )
@@ -268,7 +268,7 @@ add_virtual_volumes ()
    echo -e "\nAdding virtual volume(s)..."
    for i in $( seq 0 $(( ${#dirs_array[*]} - 1 )) ) ; do
       echo -e "\t${fs_name}/${dirs_array[i]}"
-      msg=$( $SSC_BIN -u storageadmin -E "$HASH_FILE" "$adm_node" \
+      msg=$( $SSC_BIN -u <username> -E "$HASH_FILE" "$adm_node" \
 "evs-select ${evs_name} virtual-volume add ${fs_name} \
 /${fs_name}/${dirs_array[i]} /${fs_name}/${dirs_array[i]} \"${email_list}\"" 2>&1 )
 
@@ -301,7 +301,7 @@ display_results ()
    echo -e "\nSummary\n~~~~~~~~"
    for i in $( seq 0 $(( ${#dirs_array[*]} - 1 )) ) ; do
       echo -e "NFS-export information on ${fs_name}/${dirs_array[i]}..."
-      msg=$( $SSC_BIN -u storageadmin -E "$HASH_FILE" "$adm_node" \
+      msg=$( $SSC_BIN -u <username> -E "$HASH_FILE" "$adm_node" \
 "evs-select ${evs_name} nfs-export list /${fs_name}/${dirs_array[i]}" 2>&1 )
 
       if [[ $? -eq 0 ]] ; then
@@ -314,7 +314,7 @@ display_results ()
    done
    if [[ $virtual_volumes == 'y' ]] ; then
       echo -e "\nVirtual volume information of ${fs_name}..."
-      msg=$( $SSC_BIN -u storageadmin -E "$HASH_FILE" "$adm_node" \
+      msg=$( $SSC_BIN -u <username> -E "$HASH_FILE" "$adm_node" \
 "evs-select ${evs_name} virtual-volume list ${fs_name}" 2>&1 )
 
       if [[ $? -eq 0 ]] ; then
@@ -324,7 +324,7 @@ display_results ()
          echo "\t${msg}"
       fi
       echo -e "\nQuota information of ${fs_name}..."
-      msg=$( $SSC_BIN -u storageadmin -E "$HASH_FILE" "$adm_node" \
+      msg=$( $SSC_BIN -u <username> -E "$HASH_FILE" "$adm_node" \
 "evs-select ${evs_name} quota list ${fs_name}" 2>&1 )
 
       if [[ $? -eq 0 ]] ; then
@@ -349,7 +349,7 @@ convert_evs_name_id ()
    if [[ $evs_name -gt 0 ]] ; then
 # value of evs_name is numeric
       evs_id=$evs_name
-      msg=$( $SSC_BIN -u storageadmin -E "$HASH_FILE" "$adm_node" \
+      msg=$( $SSC_BIN -u <username> -E "$HASH_FILE" "$adm_node" \
 "evs list -e ${evs_id}" 2>&1)
    
       if [[ $? -eq 0 ]] ; then
@@ -361,7 +361,7 @@ convert_evs_name_id ()
       fi
    else
 # value of evs_name is alphanumeric
-      msg=$( $SSC_BIN -u storageadmin -E "$HASH_FILE" "$adm_node" \
+      msg=$( $SSC_BIN -u <username> -E "$HASH_FILE" "$adm_node" \
 "evs list -e ${evs_name}" 2>&1)
    
       if [[ $? -eq 0 ]] ; then
