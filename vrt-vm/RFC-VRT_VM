@@ -1,0 +1,54 @@
+Motivation
+~~~~~~~~~~
+A couple of WebSys FNG's talked about an easier way to deal with VM's hosted on
+VRT-class systems over lunch a while back as they each had his ways of handling
+RT tickets in regards to VM's that were slow, non-responsive, etc.  Same topic
+came up in a few WebSys group meetings as well but there are usually many higher
+priority projects on-going.  So, since we all have a few systems running VMware
+hosting VM's, after the FNG's B-slaping each other multiple times, as well as
+from the ever-so-exciting Phil, for not keeping the Twiki page up-to-date after
+building VM's, they've decided to come up with a hopefully consist and easier
+way to deal with VM's & VRT's.
+
+
+Proof-of-concept Stage
+~~~~~~~~~~~~~~~~~~~~~~
+- Data Collection
+  Two methods of data collection have been selected by the FNG's:
+  (1) by parsing the vm-list files on the OPS-class systems with NFS mounts
+      to all VRT-reltaed qtrees.  All data is stored in one single file
+  (2) by parsing the appropriate files on each of the VRT-class system based on
+      the registered list of VM (vm-list) via onall and nhs.  Data of each VRT-
+      class system is stored in a file named with the FQDN of the VRT-class
+      system.  All files are stored in one directory.
+
+- User Interface
+  (1) Command Line via shell
+      Both designs provide CLI to access the application:
+      - syseng/scripts/sysadmin/vrt_search.pl
+      - syseng/scripts/sysadmin/vrt-vm/vmrt-cli.rb
+
+  (2) Graphical User via web browser
+      The 1st design (vrt_search.pl) has GUI available for review at:
+          http://oncall.websys.tmcs/vrt_search.pl
+      The 2nd design does not have GUI available for review yet 'cos the old-
+      fart FNG types to stinking slow.
+
+
+Future Addition
+~~~~~~~~~~~~~~~
+- Data Colection
+  Data will be collected by Hyperic agent software, or software living on every
+  single VRT-class system routinely and forwarded to a centralized DBMS for
+  this as well as other application that can make use of the data.
+
+
+Assumption
+~~~~~~~~~~
+- Users have their SSH private key loaded for accessing necessary systems for
+  data collection and/or resetting VM.
+- All hosting systems are VRT-class systems with FQDN of
+  vrt${instance}.${product}.${cluster}.${bizunit}.tmcs.
+- All VRT-class systems have NFS mount of /vrt/shared/bin to store script(s)
+  necessary for data collection.
+

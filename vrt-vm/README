@@ -1,0 +1,102 @@
+#
+# Author:  Friendly half-blind Systems Administrator of Ticketmaster
+#
+# $Id: README,v 1.5 2008/04/07 19:35:12 francis Exp $
+
+What is vrt-vm?
+~~~~~~~~~~~~~~~
+VRT-VM is a 2-portion application, central and remote, to collect and report
+information regarding VMware Server host and guest systems.  The remote portion,
+written in bash, lives on the VMware Server host systems.  When executed, 
+either via crond or manually, it collects basic information regarding the host 
+and guest systems and then transfers the data file via rsync to the central 
+host with rsynd enabled via xinetd.
+
+The central portion, written in Ruby 1.8, lives on the central host to report
+on data collected by the remote portion as well as to utilize data to perform
+hard reset of guest system without users having to know the whereabouts of 
+the guest systems, i.e., which VMware host system is hosting the guest system.
+
+
+Where do I get vrt-vm?
+~~~~~~~~~~~~~~~~~~~~~~
+The source, both central and remote, can be obtained from the syseng module of 
+CVS (syseng/scripts/sysadmin/vrt-vm).  RPM packages of the remote portion are 
+available for 3TM, 4TM, and 5TM.  RPM packages of the central portion are 
+available for 4TM and 5TM only, for the Ruby available for 3TM is pre 1.8.
+
+
+Usage
+~~~~~
+The remote portion is a simple script written in bash.  It can be slightly
+customized via the configuration file to specify a non-default central host
+and rsync module.  The recommended method to collect data is to have crond 
+execute the collectVMinfo script routinely.
+
+The central portion consists of the main CLI script and several scripts to be 
+shared by the CLI and web GUI (2.0).  Executing vrt-vm-cli with -h|--help shows 
+the usage information.  The name of the guest system (-g) can be in the format 
+of fqdn, partial of the fqdn, or regular expression.  The name of the host 
+system HAS to be in the format of fqdn.  Multiple host systems can be specified 
+one after another separated by comma(s), i.e., 1st_host,2nd_host,3rd_...  If 
+hard-resetting of the guest system should be necessary, the --reset|-r option 
+can be used to do so.  The --twiki|-t option can be used to print out twiki- 
+friendly report of all or any specific cluster for copy/paste to twiki.
+
+
+Miscellaneous
+~~~~~~~~~~~~~
+The VMinfo.sh file is the "central" version of the remote.  It can be executed 
+from the central host per instructed in the comment section of the file AFTER 
+the file has been distributed to all the VMware Server host systems.  Utilities 
+such as nhs, onall, etc. are recommended if you want to try it out.  The 
+propVMinfo.sh is an example for distributing the VMinfo.sh file.  The "simpler" 
+way of collecting data is actually executing the remote portion of vrt-vm.
+
+In order to execute vrt-vm-cli.rb directly from the source without installing 
+the RPM package, you need to tell Ruby where to look for the library files.
+The "$:" variable contains an array of all the paths Ruby searches for 
+files needed.  You can either copy the *.rb files in the lib directory to one 
+of the paths, create symbolic link from one of the paths to the files in the 
+lib directory, or export the RUBYLIB variable so that Ruby can find the files.
+To find out the paths, issue `ruby -e 'puts $:'` or 'puts $:' in irb, e.g.,
+
+$ ruby -e 'puts $:'
+/usr/lib/ruby/site_ruby/1.8
+/usr/lib/ruby/site_ruby/1.8/i386-linux
+/usr/lib/ruby/site_ruby
+/usr/lib/site_ruby/1.8
+/usr/lib/site_ruby/1.8/i386-linux
+/usr/lib/site_ruby
+/usr/lib/ruby/1.8
+/usr/lib/ruby/1.8/i386-linux
+.
+
+$ irb
+irb(main):001:0> puts $:
+/usr/lib/ruby/site_ruby/1.8
+/usr/lib/ruby/site_ruby/1.8/i386-linux
+/usr/lib/ruby/site_ruby
+/usr/lib/site_ruby/1.8
+/usr/lib/site_ruby/1.8/i386-linux
+/usr/lib/site_ruby
+/usr/lib/ruby/1.8
+/usr/lib/ruby/1.8/i386-linux
+.
+=> nil
+
+The environment variable of RUBYLIB can be set to tell Ruby where to
+find class/module files.  For example:
+
+$ export RUBYLIB=/opt/local/lib/vrt-vm/
+$ ruby -e 'puts $:'
+/opt/local/lib/vrt-vm/
+/usr/lib/ruby/site_ruby/1.8
+/usr/lib/ruby/site_ruby/1.8/i386-linux
+/usr/lib/ruby/site_ruby
+/usr/lib/site_ruby/1.8
+/usr/lib/site_ruby/1.8/i386-linux
+/usr/lib/site_ruby
+/usr/lib/ruby/1.8
+/usr/lib/ruby/1.8/i386-linux
+.
