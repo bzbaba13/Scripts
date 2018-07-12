@@ -1,4 +1,4 @@
-#!/usr/bin/env ruby -w
+#!/home/t/ruby-2.3.5-1-1/bin/ruby -w
 
 # == Synopsis
 #
@@ -9,7 +9,7 @@
 # == Author
 # Friendly half-blind Lead Storage/Systems Administrator with smiles.
 #
-# $Id: gen_infinidat_reports.rb 11114 2018-07-10 00:15:55Z fma $
+# $Id: gen_infinidat_reports.rb 11121 2018-07-12 23:27:42Z fma $
 
 
 require 'getoptlong'
@@ -71,19 +71,19 @@ end
 def read_pri_data_h(pri_file)
    @pri_data_h.clear
    @pri_data_h = JSON.load(IO.read(pri_file))
-   puts "\n#{pri_file}\n#{@pri_data_h.length}\n" if @verbose
+   puts "\n#{pri_file}\t#{@pri_data_h.length}\n" if @verbose
 end
 
 def read_sec_data_h(sec_file)
    @sec_data_h.clear
    @sec_data_h = JSON.load(IO.read(sec_file))
-   puts "\n#{sec_file}\n#{@sec_data.length}\n" if @verbose
+   puts "\n#{sec_file}\t#{@sec_data.length}\n" if @verbose
 end
 
 def read_data_h(data_file)
    @data_h.clear
    @data_h = JSON.load( IO.read ( data_file ) )
-   puts "\n#{data_file}\n#{@data_h.length}\n" if @verbose
+   puts "\n#{data_file}\t#{@data_h.length}\n" if @verbose
 end
 
 def prt_report(rpt_file,rpt_title,rpt_body)
@@ -177,9 +177,9 @@ def config(site)
             @pri_data_h["result"][rk].each { |r|
                r.each_pair { |k,v|
                   if v.nil? then
-                     rpt_body.push (sprintf( "%60s : %-s", k, 'n/a' ) )
+                     rpt_body.push( sprintf( "%60s : %-s", k, 'n/a' ) )
                   else
-                     rpt_body.push (sprintf( "%60s : %-s", k, v ) )
+                     rpt_body.push( sprintf( "%60s : %-s", k, v ) )
                   end
                }
             }
@@ -621,23 +621,34 @@ def events(site)
    rpt_body = Array.new
    datafiles = Array.new
    events_data= Array.new
+   num = 10
+   rpt_title = 'Events (critical, error, & warning) Report - ' + @site_data[site]
    fn = 'events'
-   rpt_title = 'Events Report - ' + @site_data[site]
    rpt_file = @dest_path + '/'+ fn + '_' + site + '.txt'
-   datafiles = Dir.glob("#{fn}_*_#{site}.json").sort
-   if not datafiles.empty? then
-      events_data = load_data(datafiles)
-      [ "CRITICAL", "ERROR", "WARNING" ].each { |l|
-      }
-   else
-      @mymsg.push("Critical:  Cannot find file(s) related to #{fn}.")
-   end
-   if not events_data.empty? then
-      events_data.each { |x|
-      }
-   else
-      rpt_body.push("events_data is empty.")
-   end
+   [ "critical", "error", "warning" ].each { |l|
+      fn = 'events' + '_' + l
+      datafiles = Dir.glob("#{fn}_*_#{site}.json").sort
+      rpt_body.push( sprintf( "%28s %s %s\n", '= = =', "#{l.upcase} Events", '= = =' ) )
+      if not datafiles.empty? then
+         events_data = load_data(datafiles)
+      else
+         @mymsg.push("Critical:  Cannot find file(s) related to #{fn}.")
+      end
+      if not events_data.empty? then
+         for i in 0..(num - 1)
+            events_data[i].each_pair { |k,v|
+               rpt_body.push( sprintf( "%28s : %s\n", k, v ) ) if k !~ /template/
+            }
+            rpt_body.push( sprintf( "%23s %s", '', '- - - - - - - -' ) )
+         end
+         rpt_body.push("\n")
+      else
+         rpt_body.push("\t\tNo #{l} events.")
+         rpt_body.push("\n")
+         rpt_body.push( sprintf( "%23s %s", '', '- - - - - - - -' ) )
+         rpt_body.push("\n")
+      end
+   }
    prt_report(rpt_file,rpt_title,rpt_body)
    puts "\nReport body: #{rpt_body.length}" if @verbose
    rpt_body.clear
@@ -687,6 +698,7 @@ if File.directory?("#{@src_path}") and File.directory?("#{@dest_path}") then
       san_clients(site)
       filesystems(site)
       services(site)
+      events(site)
    }
    bailout if not @mymsg.empty?
 else
@@ -695,4 +707,3 @@ else
    @mymsg.push("\tthe destination path of \"#{@dest_path}\" is not valid.")
    bailout
 end
-
