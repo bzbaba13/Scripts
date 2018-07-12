@@ -27,7 +27,7 @@ msg=''
 box_line=''
 if [[ $1 != '-d' ]] ; then
    PRI_KEY=~root/.ssh/panasas_id_rsa
-   RECIPIENT='storageadmins@yp.com'
+   RECIPIENT='recipient'
    rptpath='/var/www/html/pas_reports'
 else
    PRI_KEY=~/.ssh/panasas_id_rsa
