@@ -1,0 +1,131 @@
+#!/bin/bash
+
+# == Synopsis
+#
+# This script sends basic health report to repicient(s) via e-mail.
+#
+#
+# == Author
+# Friendly half-blind Lead Storage/Systems Administrator with smiles
+#
+
+PATH=/home/t/bin:/bin:/usr/bin
+
+# variables
+json_inpath=~/ifndt-tmp
+infile=''
+recipient=<recipient.
+rpt_body=''
+subject='General Infinidat Health Report'
+header=''
+box_line=''
+rpt_path='/var/www/html/ifndt_reports'
+rpt_file='daily_ifndt_health_report.txt'
+rpt_body=''
+
+#functions
+send_alert ()
+{
+   echo "$msg" | mutt -s "$0 from $(hostname)" $recipient
+   exit 1
+}
+
+verify_mutt ()
+{
+   which mutt 1>/dev/null 2>&1
+   if [[ $? -ne 0 ]] ; then
+      msg="Required SMTP agent 'mutt' is not available."
+      send_alert
+   fi
+}
+
+verify_jq ()
+{
+   if [[ ! -f /opt/local/jq/jq-linux64 || ! -L /home/t/bin/jq ]] ; then
+      msg="Required JSON utility 'jq' or the symbolic link in home/t is not available."
+      send_alert
+   fi
+}
+
+write_header ()
+{
+   box_line=$(for i in $( seq 1 "$(( $(echo $header | wc -L) + 6 ))" )
+              do
+                 echo -e '#\c'
+              done)
+   echo "$box_line" >> "$rpt_path"/"$rpt_file"
+   echo -e "#  ${header}  #" >> "$rpt_path"/"$rpt_file"
+   echo "$box_line" >> "$rpt_path"/"$rpt_file"
+   header=''
+}
+
+write_body ()
+{
+   echo -e "\nRetrieved on ${dt_stamp}\n" >> "$rpt_path"/"$rpt_file"
+   echo -e "$rpt_body\n\n" >> "$rpt_path"/"$rpt_file"
+   rpt_body=''
+}
+
+write_blank_line ()
+{
+   echo '' >> "$rpt_path"/"$rpt_file"
+}
+
+usage()
+{
+   echo -e "\n${0} [-d] [-h] [-r <recipient,recipient,...>]"
+   echo -e "\nwhere:"
+   echo -e "\t-d\tdebug, i.e., ./ifndt-tmp, ~/ifndt_reports, & recipient=<BLAH>"
+   echo -e "\t-r\tcomma-delimited recipients list (default: <BLAHBLAH>)"
+   echo -e "\t-h\tthis help\n"
+}
+
+
+# parse options
+while getopts ":dhr:" opt ; do
+   case $opt in
+      d)
+         json_inpath="./ifndt-tmp"
+         recipient=<BLAH>
+         rpt_path=~/ifndt_reports
+         ;;
+      h)
+         usage
+         exit 2
+         ;;
+      r)
+         recipient="$OPTARG"
+         ;;
+      \?)
+         echo "Invalid option: -${OPTARG}" >&2
+         usage
+         exit 1
+         ;;
+      :)
+         echo "Option -$OPTARG requires an argument." >&2
+         usage
+         exit 1
+         ;;
+      *)
+         usage
+         exit 1
+         ;;
+   esac
+done
+
+
+# mainline
+verify_mutt
+verify_jq
+echo '' > "$rpt_path"/"$rpt_file"
+for site in ev1 st1 ; do
+   header=$( jq '.result' "${json_inpath}/system_name_1_${site}.json" | \
+sed 's/\"//g' )
+   write_header
+   infile="${json_inpath}/system_health_state_1_${site}.json"
+   dt_stamp=$(stat --printf %z "$infile")
+   rpt_body=$( jq '.result' "$infile" | sed -e '/[{}]/ d' -e 's/\"//g' )
+   write_body
+done
+
+cat "$rpt_path"/"$rpt_file" | mutt -s "$subject" "$recipient"
