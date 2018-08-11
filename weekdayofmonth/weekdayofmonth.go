@@ -22,8 +22,38 @@ func init() {
 	t := time.Now()
 	flag.IntVar(&year, "year", t.Year(), "4-digit year, e.g., 2018")
 	flag.StringVar(&month, "month", t.Month().String(), "3+ characters month, e.g., jan, feb, etc.")
-	flag.IntVar(&nth, "nth", 1, "1-digit instance, e.g., 1 for 1st, 2 for 2nd, etc.")
+	flag.IntVar(&nth, "nth", 3, "1-digit instance, e.g., 1 for 1st, 2 for 2nd, etc.")
 	flag.StringVar(&dayofweek, "dayofweek", t.Weekday().String(), "3+ characters day-of-week, e.g., mon, tue, etc.")
+}
+
+func setupMonth(Month string) int {
+	switch {
+	case strings.Contains(Month, "jan"):
+		return 1
+	case strings.Contains(Month, "feb"):
+		return 2
+	case strings.Contains(Month, "mar"):
+		return 3
+	case strings.Contains(Month, "apr"):
+		return 4
+	case strings.Contains(Month, "may"):
+		return 5
+	case strings.Contains(Month, "jun"):
+		return 6
+	case strings.Contains(Month, "jul"):
+		return 7
+	case strings.Contains(Month, "aug"):
+		return 8
+	case strings.Contains(Month, "sep"):
+		return 9
+	case strings.Contains(Month, "oct"):
+		return 10
+	case strings.Contains(Month, "nov"):
+		return 11
+	case strings.Contains(Month, "dec"):
+		return 12
+	}
+	return 99
 }
 
 func setupDayOfWeek(DoW string) int {
@@ -47,13 +77,20 @@ func setupDayOfWeek(DoW string) int {
 }
 
 func main() {
-	//	d := time.Now()
-	flag.Parse()
-	d := time.Date(2018, 8, 1, 0, 0, 0, 0, time.UTC)
-	fmt.Printf("%v\n", d)
-	if cal.IsWeekdayN(d, 3, 2) {
-		fmt.Printf("%s\n", "good")
+	//	flag.Parse()
+	t := time.Now()
+	year := t.Year()
+	month := strings.ToLower(t.Month().String())
+	dayofweek := strings.ToLower(t.Weekday().String())
+	myMonth := setupMonth(month)
+	myDoW := setupDayOfWeek(dayofweek)
+	nth := 2
+	day := 11
+	d := time.Date(year, time.Month(myMonth), day, 0, 0, 0, 0, time.UTC)
+	if cal.IsWeekdayN(d, time.Weekday(myDoW), nth) {
+		fmt.Println("good")
 	} else {
-		fmt.Printf("%s\n", "bad")
+		fmt.Println("bad")
 	}
 }
+
