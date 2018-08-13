@@ -16,13 +16,15 @@ var (
 	month     string
 	nth       int
 	dayofweek string
+	day       int
+	found     bool
 )
 
 func init() {
 	t := time.Now()
 	flag.IntVar(&year, "year", t.Year(), "4-digit year, e.g., 2018")
 	flag.StringVar(&month, "month", t.Month().String(), "3+ characters month, e.g., jan, feb, etc.")
-	flag.IntVar(&nth, "nth", 3, "1-digit instance, e.g., 1 for 1st, 2 for 2nd, etc.")
+	flag.IntVar(&nth, "nth", 1, "1-digit instance, e.g., 1 for 1st, 2 for 2nd, etc.")
 	flag.StringVar(&dayofweek, "dayofweek", t.Weekday().String(), "3+ characters day-of-week, e.g., mon, tue, etc.")
 }
 
@@ -77,20 +79,17 @@ func setupDayOfWeek(DoW string) int {
 }
 
 func main() {
-	//	flag.Parse()
-	t := time.Now()
-	year := t.Year()
-	month := strings.ToLower(t.Month().String())
-	dayofweek := strings.ToLower(t.Weekday().String())
-	myMonth := setupMonth(month)
-	myDoW := setupDayOfWeek(dayofweek)
-	nth := 2
-	day := 11
-	d := time.Date(year, time.Month(myMonth), day, 0, 0, 0, 0, time.UTC)
-	if cal.IsWeekdayN(d, time.Weekday(myDoW), nth) {
-		fmt.Println("good")
-	} else {
-		fmt.Println("bad")
+	flag.Parse()
+	myMonth := setupMonth(strings.ToLower(month))
+	myDoW := setupDayOfWeek(strings.ToLower(dayofweek))
+	for day := 0; day < 32; day++ {
+		d := time.Date(year, time.Month(myMonth), day, 0, 0, 0, 0, time.UTC)
+		if cal.IsWeekdayN(d, time.Weekday(myDoW), nth) {
+			fmt.Println(d)
+			found = true
+		}
+	}
+	if !found {
+		fmt.Println("Unable to determine answer with provided informaiton.")
 	}
 }
-
