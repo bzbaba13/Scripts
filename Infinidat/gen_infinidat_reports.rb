@@ -1,4 +1,4 @@
-#!/home/t/ruby-2.3.5-1-1/bin/ruby -w
+#!/bin/env ruby -w
 
 # == Synopsis
 #
@@ -23,7 +23,7 @@ require 'json'
 @pri_data_h = Hash.new
 @sec_data_h = Hash.new
 @data_h = Hash.new
-@site_data = { "st1" => "Site One", "ev1" => "Site Two" }
+@site_data = { "st1" => "Site1", "ev1" => "Site2" }
 
 
 def show_usage
@@ -624,7 +624,7 @@ def events(site)
    rpt_title = 'Events (critical, error, & warning) Report - ' + @site_data[site]
    fn = 'events'
    rpt_file = @dest_path + '/'+ fn + '_' + site + '.txt'
-   [ "critical", "error", "warning" ].each { |l|
+   [ "critical", "warning", "error" ].each { |l|
       fn = 'events' + '_' + l
       datafiles = Dir.glob("#{fn}_*_#{site}.json").sort
       rpt_body.push( sprintf( "%28s %s %s\n", '= = =', "#{l.upcase} Events", '= = =' ) )
@@ -638,22 +638,60 @@ def events(site)
             events_data[i].each_pair { |k,v|
                if k !~ /template/ and k !~ /system_version/
                   if k == 'timestamp'
-                     rpt_body.push( sprintf( "%28s : %s\n", k, Time.at( v.to_s.slice(0,10).to_i ) ) )
+                     rpt_body.push( sprintf( "%33s : %s\n", k, Time.at( v.to_s.slice(0,10).to_i ) ) )
                   else
-                     rpt_body.push( sprintf( "%28s : %s\n", k, v ) )
+                     rpt_body.push( sprintf( "%33s : %s\n", k, v ) )
                   end
                end
             }
-            rpt_body.push( sprintf( "%23s %s", '', '- - - - - - - -' ) )
+            rpt_body.push( sprintf( "%23s %s\n\n", '', '- - - - - - - -' ) )
          end
          rpt_body.push("\n")
       else
-         rpt_body.push("\t\tNo #{l} events.")
-         rpt_body.push("\n")
-         rpt_body.push( sprintf( "%23s %s", '', '- - - - - - - -' ) )
+         rpt_body.push("\t\t\tNo #{l} events.")
+         rpt_body.push( sprintf( "%23s %s\n\n", '', '- - - - - - - -' ) )
          rpt_body.push("\n")
       end
    }
+   prt_report(rpt_file,rpt_title,rpt_body)
+   puts "\nReport body: #{rpt_body.length}" if @verbose
+   rpt_body.clear
+   datafiles.clear
+end
+
+def nfs_exports(site)
+   rpt_body = Array.new
+   datafiles = Array.new
+   nfs_exports_data= Array.new
+   fn = 'exports'
+   rpt_title = 'NFS Exports Report - ' + @site_data[site]
+   rpt_file = @dest_path + '/'+ fn + '_' + site + '.txt'
+   pri_file = @src_path + '/' + fn + '_' + site + '.json'
+   datafiles = Dir.glob("#{fn}_*_#{site}.json").sort
+   if not datafiles.empty?
+      nfs_exports_data = load_data(datafiles)
+   else
+      @mymsg.push("Critical:  Cannot find file(s) related to #{fn}.")
+   end
+   if not nfs_exports_data.empty?
+      nfs_exports_data.each { |n|
+         n.each_pair { |k,v|
+            case k
+            when "id", "export_path", "enabled", "filesystem_id"
+               rpt_body.push( sprintf( "%28s : %s", k, v) )
+            when "permissions"
+               mykey = k
+               v.each { |vv|
+                  rpt_body.push( sprintf( "%28s : %s", mykey, vv ) )
+                  mykey = ''
+               }
+            end
+         }
+         rpt_body.push("\n")
+      }
+   else
+      rpt_body.push("nfs_exports_data is empty.")
+   end
    prt_report(rpt_file,rpt_title,rpt_body)
    puts "\nReport body: #{rpt_body.length}" if @verbose
    rpt_body.clear
@@ -704,6 +742,7 @@ if File.directory?("#{@src_path}") and File.directory?("#{@dest_path}")
       filesystems(site)
       services(site)
       events(site)
+      nfs_exports(site)
    }
    bailout if not @mymsg.empty?
 else
