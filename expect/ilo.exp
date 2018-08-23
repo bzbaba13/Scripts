@@ -9,11 +9,11 @@
 #    set /map1/snmp1 oemhp_snmppassthru=no
 #
 # Example (modified):
-# for i in $(grep lefthand db.ev1 | grep ilo | grep -v '^;' | awk '{ print $1 }' | fping -a) ; do n="${i}.ev1" ; echo "$n" ; ~/ilo.exp "$n" '***' 'show /map1/snmp1' | grep snmp ; echo ; done
+# for i in $(grep lefthand db.ev1 | grep ilo | grep -v '^;' | \
+# awk '{ print $1 }' | fping -a) ; do n="${i}.ev1" ; echo "$n" ; \
+# ~/ilo.exp "$n" '***' 'show /map1/snmp1' | grep snmp ; echo ; done
 #
 # Author: Friendly half-blind Storage/Systems Administrator
-#
-# $Id: ilo.exp 10071 2016-11-08 00:42:39Z fma $
 #
 
 set timeout 5
@@ -27,3 +27,4 @@ expect "password:" { send -- "[lindex $argv 1]\r" }
 
 expect "hpiLO" { send -- "[lindex $argv 2]\r" }
 expect "hpiLO" { send -- "exit\r" }
+
