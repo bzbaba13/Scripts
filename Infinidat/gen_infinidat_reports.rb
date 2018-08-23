@@ -1,4 +1,4 @@
-#!/bin/env ruby -w
+#!/usr/bin/env ruby -w
 
 # == Synopsis
 #
@@ -666,7 +666,6 @@ def nfs_exports(site)
    fn = 'exports'
    rpt_title = 'NFS Exports Report - ' + @site_data[site]
    rpt_file = @dest_path + '/'+ fn + '_' + site + '.txt'
-   pri_file = @src_path + '/' + fn + '_' + site + '.json'
    datafiles = Dir.glob("#{fn}_*_#{site}.json").sort
    if not datafiles.empty?
       nfs_exports_data = load_data(datafiles)
