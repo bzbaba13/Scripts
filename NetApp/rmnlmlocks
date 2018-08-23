@@ -10,7 +10,6 @@
 # == Author
 # Friendly half-blind Lead Storage/Systems Administrator with smiles
 #
-# $Id: rmnlmlocks 10905 2018-01-12 22:31:53Z fma $
 
 PATH=/bin:/usr/bin:/sbin
 
@@ -192,3 +191,4 @@ else
       done
    done
 fi
+

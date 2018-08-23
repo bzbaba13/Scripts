@@ -1,6 +1,8 @@
 #!/bin/bash
 
-#$Id: daily_dfm_reports_c-mode 10781 2017-09-27 22:03:28Z fma $
+#
+# Author: Friendly half-blind Systems Administrator
+#
 
 PATH=/bin:/usr/bin
 
