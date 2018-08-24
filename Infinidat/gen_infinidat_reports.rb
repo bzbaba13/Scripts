@@ -1,4 +1,4 @@
-#!/home/t/ruby-2.3.5-1-1/bin/ruby -w
+#!/usr/bin/env ruby -w
 
 # == Synopsis
 #
