@@ -9,7 +9,6 @@
 # == Author
 # Friendly half-blind Lead Storage/Systems Administrator with smiles.
 #
-# $Id: gen_solidfire_reports.rb 11105 2018-06-26 20:04:56Z fma $
 
 
 require 'getoptlong'

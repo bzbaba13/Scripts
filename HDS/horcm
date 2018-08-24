@@ -3,7 +3,6 @@
 # Simple rc/init script to start/stop HDS RAIDCOM (horcm)
 # chkconfig: 2345 88 38
 
-# $Id: horcm 9623 2016-06-17 18:48:18Z fma $
 
 PATH=/bin:/usr/bin:/HORCM/usr/bin
 
@@ -26,3 +25,4 @@ else
    logger -s -t RAIDCOM "No horcm{instance}.conf file found."
    exit 1
 fi
+

@@ -3,8 +3,9 @@
 # In order to collect data from new controllers, touch empty files with the
 # controllers FQDN based on the naming convention of the existing controllers
 # and the script will automatically collect from the new controllers.
-
-#$Id: collect_NetApp_data 11005 2018-04-09 21:37:37Z fma $
+#
+# Author: Friendly half-blind Systems Administrator
+#
 
 PATH=/bin:/usr/bin
 

@@ -1,6 +1,7 @@
 #!/bin/bash
-
-#$Id: daily_crit_err_report 10977 2018-03-20 18:45:50Z fma $
+#
+# Author: Friendly half-blind Systems Administrator
+#
 
 
 PATH=/bin:/usr/bin

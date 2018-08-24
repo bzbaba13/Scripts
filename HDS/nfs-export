@@ -9,7 +9,6 @@
 # == Author
 # Friendly half-blind Lead Storage/Systems Administrator with smiles
 #
-# $Id: nfs-export 10622 2017-06-14 22:48:12Z fma $
 
 PATH=/bin:/usr/bin
 
@@ -242,3 +241,4 @@ else
    show_help
    exit 1
 fi
+

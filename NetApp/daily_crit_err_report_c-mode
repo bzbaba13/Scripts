@@ -1,6 +1,9 @@
 #!/bin/bash
 
-#$Id: daily_crit_err_report_c-mode 10988 2018-03-26 17:53:51Z fma $
+#
+# Author: Friendly half-blind Systems Administrator
+#
+
 
 PATH=/bin:/usr/bin
 
