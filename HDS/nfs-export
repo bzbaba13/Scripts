@@ -2,7 +2,7 @@
 
 # == Synopsis
 #
-# This script sets/modifies nfs-export entry on HDS storage systems via
+# This script sets/modifies nfs-export entry on HDS NAS storage systems via
 # SSC utility provided by HDS.
 #
 #
@@ -15,7 +15,7 @@ PATH=/bin:/usr/bin
 retval=9
 evs_name='no_evs'
 evs_id=99
-SSC_BIN=/<path>/ssc
+SSC_BIN=<path>/ssc
 HASH_FILE=~/.hash_file_4_evs
 hnas_node='no_hnas_node'
 node_id='no_node_id'
@@ -41,16 +41,16 @@ identify_admin_node ()
 {
    case $hnas_node in
       irv4100)
-         adm_node='irv4100-adminevs.<site>.domain'
+         adm_node='irv4100-adminevs.site.domain'
          ;;
       irv4060)
-         adm_node='irv4060-adminevs.<site>.domain'
+         adm_node='irv4060-adminevs.site.domain'
          ;;
       ash4060)
-         adm_node='ash4060-adminevs.<site>.domain'
+         adm_node='ash4060-adminevs.site.domain'
          ;;
       ash4060np)
-         adm_node='ash4060np-adminevs.<site>.domain'
+         adm_node='ash4060np-adminevs.site.domain'
          ;;
       *)
          echo -e "CRITICAL: HNAS node is not on the list of available HNAS nodes."
@@ -58,13 +58,15 @@ identify_admin_node ()
          exit 1
          ;;
    esac
+   [[ $verbose == 'y' ]] && echo -e "\tadm_node: ${adm_node}\n"
 }
 
 request_fs_name ()
 {
-   echo
+   fs_name=''
+   echo ''
    read -p "Please provide file system name followed by <Enter>: " fs_name
-   [[ $verbose == 'y' ]] && echo -e "\tfs_name: ${fs_name}"
+   [[ $verbose == 'y' ]] && echo -e "\tfs_name: ${fs_name}\n"
 }
 
 check_fs_name ()
@@ -73,6 +75,7 @@ check_fs_name ()
    msg=$( $SSC_BIN -u storageadmin -E "$HASH_FILE" "$adm_node" \
 "filesystem-list ${fs_name}" 2>&1 )
    retval=$?
+   [[ $verbose == 'y' ]] && echo -e "\tcheck_fs_name retval: ${retval}\n"
 }
 
 obtain_export_list ()
@@ -81,6 +84,7 @@ obtain_export_list ()
    msg=$( $SSC_BIN -u storageadmin -E "$HASH_FILE" "$adm_node" \
 "vn ${evs_id} nfs-export list" 2>&1 )
    retval=$?
+   [[ $verbose == 'y' ]] && echo -e "\tobtain_export_list retval: ${retval}\n"
 }
 
 identify_export_name ()
@@ -99,6 +103,7 @@ obtain_nfs_export ()
    msg=$( $SSC_BIN -u storageadmin -E "$HASH_FILE" "$adm_node" \
 "vn ${evs_id} nfs-export list ${export_name}" 2>&1 )
    retval=$?
+   [[ $verbose == 'y' ]] && echo -e "\tobtain_nfs_export retval: ${retval}\n"
 }
 
 retain_existing_nfs_client ()
@@ -109,37 +114,64 @@ retain_existing_nfs_client ()
       access=$( echo $e | awk -F'(' '{ print $2 }' )
       existing_nfs_client_array[$client]=$access
    done
+   if [[ $verbose == 'y' ]] ; then
+      echo -e "\texisting_nfs_client_array:"
+      for e in ${!existing_nfs_client_array[*]} ; do
+         echo -e "\t\t\t${e}: ${existing_nfs_client_array[$e]}"
+      done
+      echo ''
+   fi
 }
 
 fetch_nfs_client_removal ()
 {
    read_reply='n'
-   read -p "\nWould you like to remove any of the existing NFS client(s) (y|N)? " read_reply
+   echo ''
+   read -p "Would you like to remove any of the existing NFS client(s) (y|N)? " read_reply
    if [[ $( echo "$read_reply" | tr [:upper:] [:lower] ) == 'y' && $? -lt 129 ]] ; then
       echo "Please provide the NFS client(s) to be removed (separated by space)"
       echo "based on the existing NFS client list above."
       read -a nfs_client_del_array
    fi
-   if [[ x$nfs_client_del_array[0] == 'x' ]] ; then
-      echo "\tNo removal specified.  Skpping removal."
+   if [[ $verbose == 'y' ]] ; then
+      echo -e "\tnfs_client_del_array:"
+      i=0
+      while [[ $i -lt ${#nfs_client_del_array[*]} ]] ; do
+         echo -e "\t\t\t${nfs_client_del_array[$i]}"
+         ((i++))
+      done
+      echo ''
+   fi
+   if [[ x${nfs_client_del_array[0]} == 'x' ]] ; then
+      echo -e "\tNo removal specified.  Skpping removal."
       del_flag='n'
    else
       del_flag='y'
    fi
 }
 
-fetch_new_nfs_client ()
+fetch_nfs_client_addition ()
 {
    read_reply='n'
-   read -p "\nWould you like to add new NFS client(s) (y|N)? " read_reply
+   echo ''
+   read -p "Would you like to add new or change existing NFS client(s) (y|N)? " read_reply
    if [[ $( echo "$read_reply" | tr [:upper:] [:lower] ) == 'y' && $? -lt 129 ]] ; then
       echo -e "\nPlease provide IP address (first if exist) and/or FQDN of the \c"
-      echo -e "NFS client(s) and access mode separated by colon (:)"
+      echo "NFS client(s) and access mode separated by colon (:)"
       echo "Separated each set by space, e.g., <ip_addr1>:rw myhost2.mydomain:ro"
       read -a nfs_client_add_array
    fi
-   if [[ x$nfs_client_add_array[0] == 'x' ]] ; then
-      echo "\tNo addition specified.  Skipping addition."
+   if [[ $verbose == 'y' ]] ; then
+      echo -e "\tnfs_client_add_array:"
+      i=0
+      while [[ $i -lt ${#nfs_client_add_array[*]} ]] ; do
+         echo -e "\t\t\t${nfs_client_add_array[$i]}"
+         ((i++))
+      done
+      echo ''
+   fi
+   if [[ x${nfs_client_add_array[0]} == 'x' ]] ; then
+      echo -e "\tNo addition specified.  Skipping addition."
       add_flag='n'
    else
       add_flag='y'
@@ -149,8 +181,8 @@ fetch_new_nfs_client ()
 display_requested_changes ()
 {
    echo -e "\nThe following changes were requested:"
-   echo -e "\tDeletion(s):"
    if [[ $del_flag == 'y' ]] ; then
+      echo -e "\tDeletion(s):"
       i=0
       while [[ $i -lt ${#nfs_client_del_array[*]} ]] ; do
          echo -e "\t\t${nfs_client_del_array[$i]}"
@@ -160,7 +192,7 @@ display_requested_changes ()
       echo -e "\t\tNo deletion(s) specified."
    fi
    echo ''
-   echo -e "\tAddition(s):"
+   echo -e "\tAddition(s)/Modification(s):"
    if [[ $add_flag == 'y' ]] ; then
       i=0
       while [[ $i -lt ${#nfs_client_add_array[*]} ]] ; do
@@ -174,31 +206,58 @@ display_requested_changes ()
 
 build_new_nfs_client_array ()
 {
-#removal - remove nfs_client_del_array[*] from existing_nfs_client_array[*]
-   i=0
-   while [[ $i -lt ${#nfs_client_del_array[*]} ]] ; do
-      for e in ${!existing_nfs_client_array[*]} ; do
-         if [[ ${nfs_client_del_array[$i]} == $e ]] ; then
-            unset ${existing_nfs_client_array[$e]}
-            break
-         fi
+   # remove entry/ies from existing_nfs_client_array
+   if [[ $del_flag == 'y' ]] ; then
+      i=0
+      [[ $verbose == 'y' ]] && echo -e "\tsize of nfs_client_del_array: ${#nfs_client_del_array[*]}"
+      while [[ $i -lt ${#nfs_client_del_array[*]} ]] ; do
+         d=${nfs_client_del_array[$i]}
+         [[ $verbose == 'y' ]] && echo -e "\tnfs_client_del_array element: ${d}"
+         for e in ${!existing_nfs_client_array[*]} ; do
+            if [[ $verbose == 'y' ]] ; then
+               echo -e "\texisting_nfs_client_array key: ${e}"
+            fi
+            if [[ $d == $e ]] ; then
+               unset existing_nfs_client_array[$e]
+               [[ $verbose == 'y' ]] && echo -e "\tremoved ${d}"
+            fi
+         done
+         ((i++))
       done
-      ((i++))
-   done
-#addition - add existing_nfs_client_array[*] & nfs_client_add_array[*] to new_nfs_client_array
+   fi
+   # populate new_nfs_client_array with existing_nfs_client_array
    for e in ${!existing_nfs_client_array[*]} ; do
       new_nfs_client_array[$e]=${existing_nfs_client_array[$e]}
    done
-   i=0
-   while [[ $i -lt ${#nfs_client_add_array[*]} ]] ; do
-      client=$( echo ${nfs_client_add_array[$i]} | awk -F':' '{ print $1 }' )
-      access=$( echo ${nfs_client_add_array[$i]} | awk -F':' '{ print $2 }' )
-      if [[ x$client != 'x' && x$access != 'x' ]] ; then
-         new_nfs_client_array[$client]=$access
-      else
-         bad_nfs_client="${bad_nfs_client} ${nfs_client_add_array[$i]}"
-      fi
-   done
+   [[ $verbose == 'y' ]] && echo -e "\tnew_nfs_client_array size: ${#new_nfs_client_array[*]}"
+   if [[ $add_flag == 'y' ]] ; then
+      i=0
+      while [[ $i -lt ${#nfs_client_add_array[*]} ]] ; do
+         if [[ $verbose == 'y' ]] ; then
+            echo -e "\tAdding ${nfs_client_add_array[$i]}..."
+         fi
+         client=$( echo ${nfs_client_add_array[$i]} | awk -F':' '{ print $1 }' )
+         access=$( echo ${nfs_client_add_array[$i]} | awk -F':' '{ print $2 }' )
+         if [[ x$client != 'x' && x$access != 'x' ]] && \
+[[ $access == 'ro' || $access == 'rw' ]] ; then
+            new_nfs_client_array[$client]=$access
+         else
+            bad_nfs_client="${bad_nfs_client} ${nfs_client_add_array[$i]}"
+         fi
+         ((i++))
+      done
+   fi
+}
+
+display_bad_nfs_client ()
+{
+   if [[ x$bad_nfs_client != 'x' ]] ; then
+      echo -e "\nSome of the provided NFS client entry/ies is/are rejected:"
+      for i in $bad_nfs_client ; do
+         echo -e "\t$i"
+      done
+      echo ''
+   fi
 }
 
 setup_access_configuration ()
@@ -206,7 +265,7 @@ setup_access_configuration ()
    for c in ${!new_nfs_client_array[*]} ; do
       nfs_clients="${nfs_clients},${c}(${new_nfs_client_array[$c]},sec=sys,norootsquash)"
    done
-   nfs_clients=$(echo "$nfs_clients" | sed 's/^,//')
+   nfs_clients=$( echo "$nfs_clients" | sed 's/^,//' )
 }
 
 show_help ()
@@ -280,7 +339,7 @@ if [[ -r $HASH_FILE && -x $SSC_BIN && $hnas_node != 'no_hnas_node' ]] ; then
          exit 1
       fi
    fi
-   evs_id=$(echo "$msg" | grep 'Mount' | awk '{ print $5 }')
+   evs_id=$( echo "$msg" | grep 'Mount' | awk '{ print $5 }' )
    if [[ x$evs_id == x ]] ; then
       echo -e "\nCRITICAL: Failed to figure out evs_id from output of filesystem-list."
       exit 1
@@ -288,7 +347,7 @@ if [[ -r $HASH_FILE && -x $SSC_BIN && $hnas_node != 'no_hnas_node' ]] ; then
 
    obtain_export_list
    if [[ $retval == 0 ]] ; then
-      export_list=$(echo "$msg" | grep 'Export\ name' | grep "$fs_name" | awk '{ print $NF }')
+      export_list=$( echo "$msg" | grep 'Export\ name' | grep "$fs_name" | awk '{ print $NF }' )
       identify_export_name
       if [[ x$export_name == x ]] ; then
          echo -e "\nNo export name was entered.  Please try again."
@@ -310,7 +369,7 @@ if [[ -r $HASH_FILE && -x $SSC_BIN && $hnas_node != 'no_hnas_node' ]] ; then
       echo "$msg" | sed -n '/Export\ configuration/,+999 p'
       retain_existing_nfs_client
       fetch_nfs_client_removal
-      fetch_new_nfs_client
+      fetch_nfs_client_addition
       if [[ $add_flag != 'n' || $del_flag != 'n' ]] ; then
          display_requested_changes
          read_reply='n'
@@ -318,6 +377,7 @@ if [[ -r $HASH_FILE && -x $SSC_BIN && $hnas_node != 'no_hnas_node' ]] ; then
          read -p "Do you want to proceed (y/N)? " read_reply
          if [[ $(echo "$read_reply" | tr [:upper:] [:lower]) == 'y' && $? -lt 129 ]] ; then
             build_new_nfs_client_array
+            display_bad_nfs_client
             setup_access_configuration
             $SSC_BIN -u storageadmin -E "$HASH_FILE" "$adm_node" \
 "vn ${evs_id} nfs-export mod -d -c ${nfs_clients} ${export_name}" 2>&1
