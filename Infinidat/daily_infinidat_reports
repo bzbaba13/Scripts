@@ -5,20 +5,19 @@
 # This script retrieve information in JSON format from Infinidat Infinibox
 # storage systems.
 #
-# curl --basic -k -u ro-user:ReAd0n1y --output {outfile} {URL}
+# curl --basic -k -u {username}:{password} --output {outfile} {URL}
 #
 #
 # == Author
 # Friendly half-blind Lead Storage/Systems Administrator with smiles
 #
-# $Id: daily_infinidat_reports 11120 2018-07-12 16:07:40Z fma $
 
 PATH=/home/t/bin:/bin:/usr/bin
 
 # variables
 logrotate_bin=/usr/sbin/logrotate
-ev1_base_url='https://<url>/api/rest'
-st1_base_url='https://<url>/api/rest'
+site1_base_url='https://site1/api/rest'
+site2_base_url='https://site2/api/rest'
 final_url=''
 json_outpath=~/ifndt-tmp
 rpt_outpath='/var/www/html/ifndt_reports'
@@ -28,12 +27,15 @@ outfile_full=''
 mydebug=false
 gen_report=true
 pages_total=0
-recipient='<recipient>'
+recipient='recipient'
 url_cnetr='?'
+ro_user='ro-username'
+ro_pw='ro-password'
 ifndt_obj="components config cgs clusters datasets events exports filesystems \
 hosts initiators links network/interfaces network/spaces \
 notifications/rules notifications/targets pools \
-qos/policies san_clients services system/stats users volumes"
+qos/policies san_clients services system/health_state system/name system/stats \
+users volumes"
 
 #functions
 send_alert ()
@@ -71,10 +73,8 @@ verify_json_outpath ()
 # verify jq
 verify_jq ()
 {
-   if [[ -f /opt/local/jq/jq-linux64 && -L /home/t/bin/jq ]] ; then
-      break
-   else
-      msg="Required utility 'jq' or the symbolic link in t-home is not available."
+   if [[ ! -f /opt/local/jq/jq-linux64 || ! -L /home/t/bin/jq ]] ; then
+      msg="Required utility 'jq' or the symbolic link in home/t is not available."
       send_alert
    fi
 }
@@ -100,7 +100,7 @@ fetch_multi_pages()
    outfile_full="${json_outpath}/${outfile}_${page_num}_${k}.json"
    add_filter_sort
    final_url="${final_url}${url_cnetr}page_size=${page_size}&page=${page_num}"
-   curl -m 30 -s -k --basic -u <username>:<password> --output "$outfile_full" "${final_url}"
+   curl -m 30 -s -k --basic -u $ro_user:$ro_pw --output "$outfile_full" "${final_url}"
 }
 
 # fetch single page from Infinibox
@@ -108,7 +108,7 @@ fetch_single_page()
 {
    outfile_full="${json_outpath}/${outfile}_${page_num}_${k}.json"
    add_filter_sort
-   curl -m 30 -s -k --basic -u <username>:<password> --output "$outfile_full" "${final_url}"
+   curl -m 30 -s -k --basic -u $ro_user:$ro_pw --output "$outfile_full" "${final_url}"
 }
 
 usage()
@@ -196,7 +196,10 @@ done
 if [[ $gen_report == true ]] ; then
    if [[ $mydebug == true ]] ; then
       ./gen_infinidat_reports.rb -s $json_outpath -d $rpt_outpath
+      ./daily_ifndt_health_reports -d
    else
       /root/bin/gen_infinidat_reports.rb
+      /root/bin/daily_ifndt_health_reports
    fi
 fi
+
