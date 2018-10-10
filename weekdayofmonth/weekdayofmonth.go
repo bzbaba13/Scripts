@@ -24,9 +24,11 @@ var (
 func init() {
 	t := time.Now()
 	flag.IntVar(&year, "y", t.Year(), "4-digit year, e.g., 2018")
-	flag.StringVar(&month, "m", t.Month().String(), "3+ characters month, e.g., jan, feb, etc.")
+	flag.StringVar(&month, "m", t.Month().String(),
+		"3+ characters month, e.g., jan, feb, etc.")
 	flag.IntVar(&nth, "n", 1, "1-digit instance, e.g., 1 for 1st, 2 for 2nd, etc.")
-	flag.StringVar(&dayofweek, "d", t.Weekday().String(), "3+ characters day-of-week, e.g., mon, tue, etc.")
+	flag.StringVar(&dayofweek, "d", t.Weekday().String(),
+		"3+ characters day-of-week, e.g., mon, tue, etc.")
 }
 
 func setupMonth(Month string) int {
