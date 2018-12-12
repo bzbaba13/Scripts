@@ -1,8 +1,6 @@
 #!/usr/bin/env python3
 
-import re
-import sys
-import getopt
+import re, sys, getopt
 
 
 myprog = sys.argv[0]
@@ -24,17 +22,22 @@ def usage():
    print ("")
 
 try:
-   opts, args = getopt.gnu_getopt(sys.argv[1:], "df:hip:v")
+   opts, args = getopt.gnu_getopt(sys.argv[1:], "dhip:v")
+   if len(args) < 1:
+      usage()
+      sys.exit(2)
+   else:
+      infile = args[0]
 except getopt.GetoptError as err:
-   print (str(err))
-   usage ()
-   sys.exit (2)
+   print(str(err))
+   usage()
+   sys.exit(2)
 for o, a in opts:
    if o == "-d":
       debug = True
    elif o == "-h":
-      usage ()
-      sys.exit (2)
+      usage()
+      sys.exit(2)
    elif o == "-i":
       no_case = True
    elif o == "-v":
@@ -45,14 +48,13 @@ for o, a in opts:
       assert False, "unhandled option"
 
 def main():
-   infile = sys.argv[1].strip()
    if debug == True:
-      print ("Input file:", infile, " Pattern:", pattern)
+      print("Input file:", infile, " Pattern:", pattern)
    
-   if pattern == None or infile == None:
-      print ("Please provide both pattern (-p) and input file (-f).")
-      usage ()
-      sys.exit (2)
+   if pattern == None:
+      print("Please provide pattern using the -p option.")
+      usage()
+      sys.exit(2)
    
    with open ( infile, 'r' ) as f:
       for line in f:
@@ -67,9 +69,8 @@ def main():
             else:
                match = re.search( pattern, line )
          if match:
-            print ( line, end='' )
+            print( line, end='' )
 
 
 if __name__ == "__main__":
    main()
-
