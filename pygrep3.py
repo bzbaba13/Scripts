@@ -12,22 +12,22 @@ reverse_match = None
 
 
 def usage():
-   print (myprog, "[-d] [-h] [-i] [-p <pattern>] [-v] {datafile}")
+   print (myprog, "[-d] [-h] [-i] [-v] {pattern} {datafile}")
    print ("\nwhere:")
    print ("\t-d\tdebug information")
    print ("\t-h\tthis help screen")
    print ("\t-i\tcase insensitive match")
-   print ("\t-p\tpattern")
    print ("\t-v\treverse match")
    print ("")
 
 try:
-   opts, args = getopt.gnu_getopt(sys.argv[1:], "dhip:v")
-   if len(args) < 1:
+   opts, args = getopt.gnu_getopt(sys.argv[1:], "dhiv")
+   if len(args) < 2:
       usage()
       sys.exit(2)
    else:
-      infile = args[0]
+      pattern = args[0]
+      infile = args[1]
 except getopt.GetoptError as err:
    print(str(err))
    usage()
@@ -42,8 +42,6 @@ for o, a in opts:
       no_case = True
    elif o == "-v":
       reverse_match = True
-   elif o == "-p":
-      pattern = a
    else:
       assert False, "unhandled option"
 
