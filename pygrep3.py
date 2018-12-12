@@ -14,10 +14,9 @@ reverse_match = None
 
 
 def usage():
-   print (myprog, " [-d] [-f <file>] [-h] [-i] [-p <pattern>] [-v]")
+   print (myprog, "[-d] [-h] [-i] [-p <pattern>] [-v] {datafile}")
    print ("\nwhere:")
    print ("\t-d\tdebug information")
-   print ("\t-f\tinput file")
    print ("\t-h\tthis help screen")
    print ("\t-i\tcase insensitive match")
    print ("\t-p\tpattern")
@@ -36,8 +35,6 @@ for o, a in opts:
    elif o == "-h":
       usage ()
       sys.exit (2)
-   elif o == "-f":
-      infile = a
    elif o == "-i":
       no_case = True
    elif o == "-v":
@@ -48,6 +45,7 @@ for o, a in opts:
       assert False, "unhandled option"
 
 def main():
+   infile = sys.argv[1].strip()
    if debug == True:
       print ("Input file:", infile, " Pattern:", pattern)
    
