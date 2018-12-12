@@ -49,11 +49,6 @@ def main():
    if debug == True:
       print("Input file:", infile, " Pattern:", pattern)
    
-   if pattern == None:
-      print("Please provide pattern using the -p option.")
-      usage()
-      sys.exit(2)
-   
    with open ( infile, 'r' ) as f:
       for line in f:
          if no_case == True:

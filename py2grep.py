@@ -1,8 +1,6 @@
 #!/usr/bin/env python2
 
-import re
-import sys
-import getopt
+import re, sys, getopt
 
 
 myprog = sys.argv[0]
@@ -14,18 +12,22 @@ reverse_match = False
 
 
 def usage():
-   print myprog, " [-d] [-f <file>] [-h] [-i] [-p <pattern>] [-v]"
+   print myprog, " [-d] [-h] [-i] [-v] {pattern} {datafile}"
    print "\nwhere:"
    print "\t-d\tdebug information"
-   print "\t-f\tinput file"
    print "\t-h\tthis help screen"
    print "\t-i\tcase insensitive match"
-   print "\t-p\tpattern"
    print "\t-v\treverse match"
    print ""
 
 try:
-   opts, args = getopt.gnu_getopt(sys.argv[1:], "df:hip:v")
+   opts, args = getopt.gnu_getopt(sys.argv[1:], "dhiv")
+   if len(args) < 2:
+      usage()
+      sys.exit(2)
+   else:
+      pattern = args[0]
+      infile = args[1]
 except getopt.GetoptError as err:
    print str(err)
    usage()
@@ -36,25 +38,16 @@ for o, a in opts:
    elif o == "-h":
       usage()
       sys.exit(2)
-   elif o == "-f":
-      infile = a
    elif o == "-i":
       no_case = True
    elif o == "-v":
       reverse_match = True
-   elif o == "-p":
-      pattern = a
    else:
       assert False, "unhandled option"
 
 def main():
    if debug == True:
       print "Input file:", infile, " Pattern:", pattern
-   
-   if pattern == None or infile == None:
-      print "Please provide both pattern (-p) and input file (-f)."
-      usage()
-      sys.exit(2)
    
    with open( infile, 'r' ) as f:
       for line in f:
@@ -74,4 +67,3 @@ def main():
 
 if __name__ == "__main__":
    main()
-
