@@ -1,17 +1,12 @@
 #!/usr/bin/env python3
 
-import boto3, pprint
+import pprint
 
 
-def main():
-   client = boto3.client('ec2')
-   response = client.describe_instance_status(
-      IncludeAllInstances=True
-   )
-   pprint.pprint (response['InstanceStatuses'])
-   print ()
-   pprint.pprint (response['ResponseMetadata'])
+class ComputeInstance:
+   def __init__(self, id, current_state):
+      self.id = id
+      self.state = current_state
 
 
-if __name__ == "__main__":
-   main()
+#if __name__ == "__main__":

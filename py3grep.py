@@ -12,13 +12,13 @@ reverse_match = None
 
 
 def usage():
-   print (myprog, "[-d] [-h] [-i] [-v] {pattern} {datafile}")
-   print ("\nwhere:")
-   print ("\t-d\tdebug information")
-   print ("\t-h\tthis help screen")
-   print ("\t-i\tcase insensitive match")
-   print ("\t-v\treverse match")
-   print ("")
+   print(myprog, "[-d] [-h] [-i] [-v] {pattern} {datafile}")
+   print("\nwhere:")
+   print("\t-d\tdebug information")
+   print("\t-h\tthis help screen")
+   print("\t-i\tcase insensitive match")
+   print("\t-v\treverse match")
+   print()
 
 try:
    opts, args = getopt.gnu_getopt(sys.argv[1:], "dhiv")
@@ -49,20 +49,20 @@ def main():
    if debug == True:
       print("Input file:", infile, " Pattern:", pattern)
    
-   with open ( infile, 'r' ) as f:
+   with open(infile, 'r') as f:
       for line in f:
          if no_case == True:
             if reverse_match == True:
-               match = not re.search ( pattern, line, flags=re.I )
+               match = not re.search(pattern, line, flags=re.I)
             else:
-               match = re.search ( pattern, line, flags=re.I )
+               match = re.search(pattern, line, flags=re.I)
          else:
             if reverse_match == True:
-               match = not re.search( pattern, line )
+               match = not re.search(pattern, line)
             else:
-               match = re.search( pattern, line )
+               match = re.search(pattern, line)
          if match:
-            print( line, end='' )
+            print(line, end='')
 
 
 if __name__ == "__main__":

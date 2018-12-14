@@ -49,18 +49,18 @@ def main():
    if debug == True:
       print "Input file:", infile, " Pattern:", pattern
    
-   with open( infile, 'r' ) as f:
+   with open(infile, 'r') as f:
       for line in f:
          if no_case == True:
             if reverse_match == True:
-               match = not re.search ( pattern, line, flags=re.I )
+               match = not re.search(pattern, line, flags=re.I)
             else:
-               match = re.search ( pattern, line, flags=re.I )
+               match = re.search(pattern, line, flags=re.I)
          else:
             if reverse_match == True:
-               match = not re.search( pattern, line )
+               match = not re.search(pattern, line)
             else:
-               match = re.search( pattern, line )
+               match = re.search(pattern, line)
          if match:
             print line,
 
