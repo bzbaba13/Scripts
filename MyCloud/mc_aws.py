@@ -2,6 +2,7 @@
 
 import boto3, pprint
 
+verbose = False
 
 def GetCompute():
    client = boto3.client('ec2')
@@ -10,9 +11,10 @@ def GetCompute():
    )
    statuscode = response['ResponseMetadata']['HTTPStatusCode']
    if statuscode == 200:
-      pprint.pprint (response['InstanceStatuses'])
+      pprint.pprint(response['InstanceStatuses'])
       print()
-      pprint.pprint (response['ResponseMetadata'])
+      if verbose == True:
+         pprint.pprint(response['ResponseMetadata'])
    else:
       print('Failed to retrieve EC2 data with code: ', str(statuscode))
 
