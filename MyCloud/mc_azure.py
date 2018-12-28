@@ -28,20 +28,18 @@ haikunator = Haikunator()
 # Azure Datacenter
 LOCATION = 'westus'
 
-# Resource Group
-GROUP_NAME = 'memoirsforever'
-
 def get_credentials():
+   group_name = os.environ['AZURE_GROUP_NAME']
    subscription_id = os.environ['AZURE_SUBSCRIPTION_ID']
    credentials = ServicePrincipalCredentials(
-      client_id=os.environ['AZURE_CLIENT_ID'],
-      secret=os.environ['AZURE_CLIENT_SECRET'],
-      tenant=os.environ['AZURE_TENANT_ID']
+      client_id = os.environ['AZURE_CLIENT_ID'],
+      secret = os.environ['AZURE_CLIENT_SECRET'],
+      tenant = os.environ['AZURE_TENANT_ID']
    )
-   return credentials, subscription_id
+   return credentials, group_name, subscription_id
 
 
-credentials, subscription_id = get_credentials()
+credentials, group_name, subscription_id = get_credentials()
 #resource_client = ResourceManagementClient(credentials, subscription_id)
 compute_client = ComputeManagementClient(credentials, subscription_id)
 #network_client = NetworkManagementClient(credentials, subscription_id)
@@ -68,7 +66,7 @@ def ListVMinSub():
 
 def ListVMinRG():
    print('\nList VMs in resource group')
-   for vm in compute_client.virtual_machines.list(GROUP_NAME):
+   for vm in compute_client.virtual_machines.list(group_name):
       print("\tVM: {}".format(vm.name))
 
 #def DeleteVM():

@@ -1,0 +1,7 @@
+boto3
+azure-common
+azure-mgmt-compute
+azure-mgmt-managementgroups
+azure-mgmt-network
+azure-mgmt-resource
+haikunator
