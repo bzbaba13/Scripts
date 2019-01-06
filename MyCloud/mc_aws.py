@@ -20,6 +20,7 @@ def GetAllEC2InstanceStatus():
       if verbose == True:
          print()
          pprint.pprint(response['ResponseMetadata'])
+      print()
    else:
       print('Failed to retrieve EC2 data with code: ', str(statuscode))
 
@@ -30,17 +31,23 @@ def GetAllEC2Instances():
       print(instance.id, instance.tags, instance.state)
 
 def GetAllStoppedEC2Instances():
+   print("Looking for all stopped/stopping instances...")
    IdList = []
    ec2 = boto3.resource('ec2')
    instances = ec2.instances.filter(
-      Filters=[{'Name': 'instance-state-name', 'Values': ['stopped']}]
+      Filters=[{'Name': 'instance-state-name', 'Values': ['stopped', 'stopping']}]
    )
    for instance in instances:
       IdList.append(instance.id)
       print(instance.id, instance.tags, instance.state)
+   if len(IdList) == 0:
+      print("No instances with state of 'stopped'/'stopping' found.\n")
+   else:
+      print()
    return(IdList)
 
 def GetAllRunningEC2Instances():
+   print("Looking for all running instances...")
    IdList = []
    ec2 = boto3.resource('ec2')
    instances = ec2.instances.filter(
@@ -49,16 +56,58 @@ def GetAllRunningEC2Instances():
    for instance in instances:
       IdList.append(instance.id)
       print(instance.id, instance.tags, instance.state)
+   if len(IdList) == 0:
+      print("No instances with state of 'running' found.\n")
+   else:
+      print()
    return(IdList)
 
 def StartAllStoppedEC2Instances(myids):
    ec2 = boto3.resource('ec2')
-   ec2.instances.filter(InstanceIds=myids).start()
-   ec2.instance.wait_until_running()
+   response = ec2.instances.filter(InstanceIds=myids).start()
+#   ec2.instance.wait_until_running(myids)
+   pprint.pprint(response)
 
 def StopAllStoppedEC2Instances(myids):
    ec2 = boto3.resource('ec2')
-   ec2.instances.filter(InstanceIds=myids).stop()
+   response = ec2.instances.filter(InstanceIds=myids).stop()
+   pprint.pprint(response)
+
+def GetNetworkInterfaces(myids):
+   client = boto3.client('ec2')
+   response = client.describe_network_interfaces(
+      Filters=[
+         {
+            'Name': 'attachment.instance-id',
+            'Values': myids,
+         },
+      ],
+      DryRun=False
+   )
+   statuscode = response['ResponseMetadata']['HTTPStatusCode']
+   if statuscode == 200:
+      elements = response['NetworkInterfaces']
+#      pprint.pprint(elements)
+      for element in elements:
+         if 'Attachment' in element:
+            print(
+               "Instance ID:", element['Attachment']['InstanceId'],
+               "\tAvailability Zone:", element['AvailabilityZone'],
+               "\n\tPrivate DNS Name:", element['PrivateDnsName'],
+               "\n\tIP Address:", element['PrivateIpAddress']
+            )
+         else:
+            print("\tNo 'Attachment' section available.")
+         if 'Association' in element:
+            print(
+               "\tPublic DNS Name:", element['Association']['PublicDnsName'],
+               "\n\tIP Address:", element['Association']['PublicIp']
+            )
+         else:
+            print("\tNo 'Assocation' section available.")
+         print()
+   else:
+      pprint.pprint(response['ResponseMetadata'])
 
 def GetIAMUser():
    pages = dict()
@@ -77,10 +126,9 @@ def GetIAMUser():
 
 # for testing purposes
 if __name__ == "__main__":
-   GetAllEC2InstanceStatus()
-#   GetAllEC2Instances()
-#   myids = GetAllStoppedEC2Instances()
-#   StartAllStoppedEC2Instances(myids)
-#   myids = GetAllRunningEC2Instances()
-#   StopAllStoppedEC2Instances(myids)
-#   GetIAMUser()
+   myids = GetAllStoppedEC2Instances()
+   if len(myids) > 0:
+      GetNetworkInterfaces(myids)
+   myids = GetAllRunningEC2Instances()
+   if len(myids) > 0:
+      GetNetworkInterfaces(myids)
