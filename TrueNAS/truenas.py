@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 
-import datetime, getpass, pprint, sys
+import datetime, getopt, getpass, pprint, sys
 import json
 import requests
 
-baseurl = 'http://{somewhere}/'
+myprog = sys.argv[0]
+baseurl = 'http://{some_address}/'
 
 
 def non200(t):
@@ -57,6 +58,34 @@ def getSysInfo(pw):
    else:
       non200(response.text)
 
+def getDataset():
+   dsName = input('Please enter dataset, e.g., tank/fYP/DEV/fma_test: ')
+   return(dsName)
+
+def delSnapshot(pw,dsName):
+   print("\nDeleting ZFS snapshot:", dsName, "for dataset:", dsName)
+   ssName = input('Please enter name of snapshot: ')
+   url = baseurl + "api/v2.0/zfs/snapshot/remove"
+   response = requests.post(
+      url,
+      auth = ('root', pw),
+      timeout = 10,
+      headers = {'Content-Type': 'application/json'},
+      data = json.dumps(
+         {
+            'dataset': dsName,
+            'name': ssName,
+         }
+      )
+   )
+   if response.status_code == 200:
+      if response.text == 'true':
+         print("\tSuccessfully deleted snapshot", ssName, "of dataset:", dsName)
+      else:
+         print("\tWARNING: Failed to delete snapshot:", ssName, "of dataset", dsName)
+   else:
+      non200(response.text)
+
 def getSnapshot(pw,dsName):
    print("\nLooking up ZFS snapshot for dataset:", dsName)
    print("It may take some time so please be patient...")
@@ -73,8 +102,10 @@ def getSnapshot(pw,dsName):
          if item['dataset'] == dsName:
             ssNames.append(item['snapshot_name'])
       if len(ssNames) > 0:
+         print("Snapshot(s)...")
          for ssName in ssNames:
             print("\t", ssName)
+         print()
       else:
          print("\tNo snapshot(s) found for the dataset.\n")
    else:
@@ -136,8 +167,46 @@ def verifyUser(pw):
    else:
       non200(response.text)
 
+def usage():
+   print(myprog, "[-c] [-d] [-i] [-l] [-s] [-u]")
+   print("\nwhere:")
+   print("    Snapshot")
+   print("\t-c   Create snapshot")
+   print("\t-d   Delete snapshot")
+   print("\t-l   List snapshot(s)")
+   print("    System")
+   print("\t-i   system Information")
+   print("\t-s   fetch all Services")
+   print("\t-u   fetch all Users")
+   print()
+   sys.exit(2)
 
-if __name__ == "__main__":
-   PW = getPW()
-   verifyUser(PW)
-
+try:
+   opts, args = getopt.gnu_getopt(sys.argv[1:], "cdilsu")
+   if len(opts) < 1:
+      usage()
+except getopt.GetoptError as err:
+   print(str(err))
+   usage()
+   sys.exit(2)
+PW = getPW()
+for o, a in opts:
+   if o == "-c":
+      DSN = takeSnapshot(PW)
+      getSnapshot(PW,DSN)
+   elif o == "-d":
+      DSN = getDataset()
+      delSnapshot(PW,DSN)
+   elif o == "-h":
+      usage()
+   elif o == "-i":
+      getSysInfo(PW)
+   elif o == "-l":
+      DSN = getDataset()
+      getSnapshot(PW,DSN)
+   elif o == "-s":
+      getAllServices(PW)
+   elif o == "-u":
+      getAllUsers(PW)
+   else:
+      usage()
