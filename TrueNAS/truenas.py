@@ -1,5 +1,10 @@
 #!/usr/bin/env python3
 
+# This script, written in Python 3.6+, performs various tasks via the TrueNAS
+# v2.0 API.  Additional development may be added to better format/utilize
+# data returned by API.
+
+
 import datetime, getopt, getpass, pprint, sys
 import json
 import requests
@@ -18,6 +23,32 @@ def getPW():
       stream=None
    )
    return pw
+
+def checkPW(pw):
+   print("Verifying entered password...")
+   url = baseurl + "api/v2.0/auth/check_user"
+   response = requests.post(
+      url,
+      auth = ('root', pw),
+      timeout = 10,
+      headers = {'Content-Type': 'application/json'},
+      data = json.dumps(
+         {
+            'username': 'root',
+            'password': pw,
+         }
+      )
+   )
+   if response.status_code == 200:
+      if response.text == 'true':
+         print("\tVerification succeeded.\n")
+      else:
+         print("\tCRITICAL: password verification failed.\n")
+         sys.exit(1)
+   else:
+      non200(response.text)
+      print("CRITICAL: Incorrect password entered.  Terminating execution.\n")
+      sys.exit(1)
 
 def getAllUsers(pw):
    print("\nFetching data of all user accounts...")
@@ -55,6 +86,7 @@ def getSysInfo(pw):
    )
    if response.status_code == 200:
       pprint.pprint(response.json())
+      print()
    else:
       non200(response.text)
 
@@ -86,7 +118,7 @@ def delSnapshot(pw,dsName):
    else:
       non200(response.text)
 
-def getSnapshot(pw,dsName):
+def listSnapshot(pw,dsName):
    print("\nLooking up ZFS snapshot for dataset:", dsName)
    print("It may take some time so please be patient...")
    url = baseurl + "api/v2.0/zfs/snapshot"
@@ -190,10 +222,11 @@ except getopt.GetoptError as err:
    usage()
    sys.exit(2)
 PW = getPW()
+checkPW(PW)
 for o, a in opts:
    if o == "-c":
       DSN = takeSnapshot(PW)
-      getSnapshot(PW,DSN)
+      listSnapshot(PW,DSN)
    elif o == "-d":
       DSN = getDataset()
       delSnapshot(PW,DSN)
@@ -203,10 +236,11 @@ for o, a in opts:
       getSysInfo(PW)
    elif o == "-l":
       DSN = getDataset()
-      getSnapshot(PW,DSN)
+      listSnapshot(PW,DSN)
    elif o == "-s":
       getAllServices(PW)
    elif o == "-u":
       getAllUsers(PW)
    else:
       usage()
+
