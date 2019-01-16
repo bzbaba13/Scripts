@@ -1,5 +1,5 @@
 # This is the AWS portion of the MyCloud application.
-# Python 3.6 or newer is required for execution.
+# Python 3.6 is required for execution.
 
 import boto3, pprint, json
 
