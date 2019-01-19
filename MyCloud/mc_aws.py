@@ -39,9 +39,9 @@ def GetAllStoppedEC2Instances():
    )
    for instance in instances:
       IdList.append(instance.id)
-      print(instance.id, instance.tags, instance.state)
+      print(instance.id, instance.tags, instance.instance_type, instance.state)
    if len(IdList) == 0:
-      print("No instances with state of 'stopped'/'stopping' found.\n")
+      print("\tNo instances with state of 'stopped'/'stopping' found.\n")
    else:
       print()
    return(IdList)
@@ -55,9 +55,9 @@ def GetAllRunningEC2Instances():
    )
    for instance in instances:
       IdList.append(instance.id)
-      print(instance.id, instance.tags, instance.state)
+      print(instance.id, instance.tags, instance.instance_type, instance.state)
    if len(IdList) == 0:
-      print("No instances with state of 'running' found.\n")
+      print("\tNo instances with state of 'running' found.\n")
    else:
       print()
    return(IdList)
