@@ -39,7 +39,10 @@ def GetAllStoppedEC2Instances():
    )
    for inst in instances:
       IdList.append(inst.instance_id)
-      print(inst.instance_id, inst.tags, inst.instance_type, inst.state)
+      print("ID:", inst.instance_id, 
+            "\tType:", inst.instance_type, 
+            "\tState:", inst.state)
+      print("    Tags:", inst.tags)
       print("\tPrivate DNS name:", inst.private_dns_name)
       print("\t      IP address:", inst.private_ip_address)
       if len(inst.public_dns_name) > 0:
@@ -63,7 +66,10 @@ def GetAllRunningEC2Instances():
    )
    for inst in instances:
       IdList.append(inst.instance_id)
-      print(inst.instance_id, inst.tags, inst.instance_type, inst.state)
+      print("ID:", inst.instance_id, 
+            "\tType:", inst.instance_type, 
+            "\tState:", inst.state)
+      print("    Tags:", inst.tags)
       print("\tPrivate DNS name:", inst.private_dns_name)
       print("\t      IP address:", inst.private_ip_address)
       if len(inst.public_dns_name) > 0:
@@ -81,7 +87,6 @@ def GetAllRunningEC2Instances():
 def StartAllStoppedEC2Instances(myids):
    ec2 = boto3.resource('ec2')
    response = ec2.instances.filter(InstanceIds=myids).start()
-#   ec2.instance.wait_until_running(myids)
    pprint.pprint(response)
 
 def StopAllStoppedEC2Instances(myids):
