@@ -1,5 +1,5 @@
 # This is the AWS portion of the MyCloud application.
-# Python 3.6 or newer is required for execution.
+# Python 3.6 and boto3 are required for execution.
 
 import boto3, pprint, json
 
@@ -37,11 +37,22 @@ def GetAllStoppedEC2Instances():
    instances = ec2.instances.filter(
       Filters=[{'Name': 'instance-state-name', 'Values': ['stopped', 'stopping']}]
    )
-   for instance in instances:
-      IdList.append(instance.id)
-      print(instance.id, instance.tags, instance.state)
+   for inst in instances:
+      IdList.append(inst.instance_id)
+      print("ID:", inst.instance_id, 
+            "\tType:", inst.instance_type, 
+            "\tState:", inst.state)
+      print("    Tags:", inst.tags)
+      print("\tPrivate DNS name:", inst.private_dns_name)
+      print("\t      IP address:", inst.private_ip_address)
+      if len(inst.public_dns_name) > 0:
+         print("\t Public DNS name:", inst.public_dns_name)
+      else:
+         print("\t Public DNS name: None")
+      print("\t      IP address:", inst.public_ip_address)
+      print()
    if len(IdList) == 0:
-      print("No instances with state of 'stopped'/'stopping' found.\n")
+      print("\tNo instances with state of 'stopped'/'stopping' found.\n")
    else:
       print()
    return(IdList)
@@ -53,11 +64,22 @@ def GetAllRunningEC2Instances():
    instances = ec2.instances.filter(
       Filters=[{'Name': 'instance-state-name', 'Values': ['running']}]
    )
-   for instance in instances:
-      IdList.append(instance.id)
-      print(instance.id, instance.tags, instance.state)
+   for inst in instances:
+      IdList.append(inst.instance_id)
+      print("ID:", inst.instance_id, 
+            "\tType:", inst.instance_type, 
+            "\tState:", inst.state)
+      print("    Tags:", inst.tags)
+      print("\tPrivate DNS name:", inst.private_dns_name)
+      print("\t      IP address:", inst.private_ip_address)
+      if len(inst.public_dns_name) > 0:
+         print("\t Public DNS name:", inst.public_dns_name)
+      else:
+         print("\t Public DNS name: None")
+      print("\t      IP address:", inst.public_ip_address)
+      print()
    if len(IdList) == 0:
-      print("No instances with state of 'running' found.\n")
+      print("\tNo instances with state of 'running' found.\n")
    else:
       print()
    return(IdList)
@@ -65,7 +87,6 @@ def GetAllRunningEC2Instances():
 def StartAllStoppedEC2Instances(myids):
    ec2 = boto3.resource('ec2')
    response = ec2.instances.filter(InstanceIds=myids).start()
-#   ec2.instance.wait_until_running(myids)
    pprint.pprint(response)
 
 def StopAllStoppedEC2Instances(myids):
@@ -126,9 +147,5 @@ def GetIAMUser():
 
 # for testing purposes
 if __name__ == "__main__":
-   myids = GetAllStoppedEC2Instances()
-   if len(myids) > 0:
-      GetNetworkInterfaces(myids)
-   myids = GetAllRunningEC2Instances()
-   if len(myids) > 0:
-      GetNetworkInterfaces(myids)
+   GetAllStoppedEC2Instances()
+   GetAllRunningEC2Instances()
