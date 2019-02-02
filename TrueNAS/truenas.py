@@ -1,18 +1,20 @@
 #!/usr/bin/env python3
 
 # This script, written in Python 3.6+, performs various tasks via the TrueNAS
-# v2.0 API.  Additional development may be added to better format/utilize
+# API.  Additional development may be added to better format/utilize
 # data returned by API.  Due to the execution/wait time of certain API calls,
-# some can be combined while the others, e.g., listing snapshots, is intentially
+# e.g., listing snapshots, is intentially
 # programmed not to be combined.
 
 
-import datetime, getopt, getpass, pprint, sys
+import datetime, getopt, getpass
+import re, pprint, sys
 import json
 import requests
 
 myprog = sys.argv[0]
-baseurl = 'http://dfwstitn121.dexmedia.com/api/v2.0/'
+v1baseurl = 'http://{fqdn}/api/v1.0/'
+v2baseurl = 'http://{fqdn}/api/v2.0/'
 
 
 def non200(t):
@@ -26,11 +28,12 @@ def getPW():
    )
    return(pw)
 
-def httpGet(url, pw, timeo):
+def httpGet(url, pw, timeo, payl):
    r = requests.get(
       url,
       auth = ('root', pw),
-      timeout = timeo
+      timeout = timeo,
+      params = payl
    )
    return(r)
 
@@ -46,7 +49,7 @@ def httpPost(url, pw, timeo, hdrs, d):
 
 def checkPW(pw):
    print("Verifying entered password...")
-   url = baseurl + "auth/check_user"
+   url = v2baseurl + "auth/check_user"
    timeo = 5
    hdrs = {'Content-Type': 'application/json'}
    data = json.dumps(
@@ -58,7 +61,7 @@ def checkPW(pw):
    response = httpPost(url, pw, timeo, hdrs, data)
    if response.status_code == 200:
       if response.text == 'true':
-         print("\tVerification succeeded.\n")
+         print("\tVerification succeeded.")
       else:
          print("\tCRITICAL: password verification failed.\n")
          sys.exit(1)
@@ -69,9 +72,9 @@ def checkPW(pw):
 
 def getAllUsers(pw):
    print("\nFetching data of all user accounts...")
-   url = baseurl + "user"
+   url = v2baseurl + "user"
    timeo = 10
-   response = httpGet(url, pw, timeo)
+   response = httpGet(url, pw, timeo, None)
    if response.status_code == 200:
       pprint.pprint(response.json())
    else:
@@ -79,9 +82,9 @@ def getAllUsers(pw):
 
 def getAllServices(pw):
    print("\nFetching data of all services...")
-   url = baseurl + "service"
+   url = v2baseurl + "service"
    timeo = 10
-   response = httpGet(url, pw, timeo)
+   response = httpGet(url, pw, timeo, None)
    if response.status_code == 200:
       pprint.pprint(response.json())
    else:
@@ -89,9 +92,9 @@ def getAllServices(pw):
 
 def getSysInfo(pw):
    print("\nObtaining system information...")
-   url = baseurl + "system/info"
+   url = v2baseurl + "system/info"
    timeo = 10
-   response = httpGet(url, pw, timeo)
+   response = httpGet(url, pw, timeo, None)
    if response.status_code == 200:
       pprint.pprint(response.json())
       print()
@@ -110,7 +113,7 @@ def getDataset():
 def delSnapshot(pw, dsName):
    print("\nDeleting ZFS snapshot:", dsName, "for dataset:", dsName)
    ssName = input('Please enter name of snapshot: ')
-   url = baseurl + "zfs/snapshot/remove"
+   url = v2baseurl + "zfs/snapshot/remove"
    timeo = 10
    hdrs = {'Content-Type': 'application/json'}
    data = json.dumps(
@@ -132,9 +135,9 @@ def delSnapshot(pw, dsName):
 def listSnapshot(pw, dsName):
    print("\nLooking up ZFS snapshot for dataset:", dsName)
    print("It may take some time so please be patient...")
-   url = baseurl + "zfs/snapshot"
+   url = v2baseurl + "zfs/snapshot"
    timeo = 90
-   response = httpGet(url, pw, timeo)
+   response = httpGet(url, pw, timeo, None)
    if response.status_code == 200:
       ssList = response.json()
       ssNames = []
@@ -161,7 +164,7 @@ def takeSnapshot(pw, dsName):
                '{:%Y-%m-%d-%H:%M:%S}'.format(d)
             )
    print("Name of snapshot:", ssName)
-   url = baseurl + "zfs/snapshot"
+   url = v2baseurl + "zfs/snapshot"
    timeo = 10
    hdrs = {'Content-Type': 'application/json'}
    data = json.dumps(
@@ -181,29 +184,29 @@ def takeSnapshot(pw, dsName):
       non200(response.text)
    sys.exit(0)
 
-def verifyUser(pw):
-   print("\nVerifying entered password...")
-   url = baseurl + "auth/check_user"
+def getNFSExports(pw):
+   print("\nFetching NFS Exports information...")
+   ptrn = input('Please enter path pattern (case sensitive): ')
+   exList = []
+   url = v1baseurl + "sharing/nfs/"
    timeo = 10
-   hdrs = {'Content-Type': 'application/json'}
-   data = json.dumps(
-      {
-         'username': 'root',
-         'password': pw,
-      }
-   )
-   response = httpPost(url, pw, timeo, hdrs, data)
+   payld = {'limit': 9999}
+   response = httpGet(url, pw, timeo, payld)
    if response.status_code == 200:
-      if response.text == 'true':
-         print("Verification of user succeeded.")
-      else:
-         print("Verification of user failed.")
+      exList = response.json()
+      for item in exList:
+         match = re.search(ptrn, str(item['nfs_paths']))
+         if match:
+            pprint.pprint(item)
+      print()
    else:
       non200(response.text)
 
 def usage():
-   print(myprog, "[-c|d|l] [-i] [-s] [-u]")
+   print(myprog, "[-e] [-c|d|l] [-i] [-s] [-u]")
    print("\nwhere:")
+   print("    NFS")
+   print("\t-e   Exports")
    print("    Snapshot")
    print("\t-c   Create snapshot")
    print("\t-d   Delete snapshot")
@@ -216,7 +219,7 @@ def usage():
    sys.exit(2)
 
 try:
-   opts, args = getopt.gnu_getopt(sys.argv[1:], "cdilsu")
+   opts, args = getopt.gnu_getopt(sys.argv[1:], "cdeilsu")
    if len(opts) < 1:
       usage()
 except getopt.GetoptError as err:
@@ -232,8 +235,8 @@ for o, a in opts:
    elif o == "-d":
       DSN = getDataset()
       delSnapshot(PW, DSN)
-   elif o == "-h":
-      usage()
+   elif o == "-e":
+      getNFSExports(PW)
    elif o == "-i":
       getSysInfo(PW)
    elif o == "-l":
