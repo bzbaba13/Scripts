@@ -1,7 +1,8 @@
 # This is the AWS portion of the MyCloud application.
-# Python 3.6 and boto3 are required for execution.
+# Python 3.6+, AWS CLI, and boto3 are required for execution.
 
-import boto3, pprint, json
+import boto3
+import pprint, json
 
 verbose = False
 
