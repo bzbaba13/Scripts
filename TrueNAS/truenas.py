@@ -190,7 +190,7 @@ def getNFSExports(pw):
    exList = []
    url = v1baseurl + "sharing/nfs/"
    timeo = 10
-   payld = {'limit': 9999}
+   payld = {'limit': 0}
    response = httpGet(url, pw, timeo, payld)
    if response.status_code == 200:
       exList = response.json()
