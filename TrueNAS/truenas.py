@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-# This script, written in Python 3.6+, performs various tasks via the TrueNAS
+# This script, requires Python 3.6+, performs various tasks via the TrueNAS
 # API.  Additional development may be added to better format/utilize
 # data returned by API.  Due to the execution/wait time of certain API calls,
 # e.g., listing snapshots, is intentially
@@ -39,6 +39,16 @@ def httpGet(url, pw, timeo, payl):
 
 def httpPost(url, pw, timeo, hdrs, d):
    r = requests.post(
+      url,
+      auth = ('root', pw),
+      timeout = timeo,
+      headers = hdrs,
+      data = d
+   )
+   return(r)
+
+def httpPut(url, pw, timeo, hdrs, d):
+   r = requests.put(
       url,
       auth = ('root', pw),
       timeout = timeo,
@@ -156,7 +166,7 @@ def listSnapshot(pw, dsName):
    sys.exit(0)
 
 def takeSnapshot(pw, dsName):
-   print("\nAttempting to take ZFS snapshot of dataset...")
+   print("\nTake ZFS snapshot of dataset...")
    d = datetime.datetime.utcnow()
    ssName = '{}{}{}'.format(
                dsName.rsplit(sep='/',
@@ -184,29 +194,83 @@ def takeSnapshot(pw, dsName):
       non200(response.text)
    sys.exit(0)
 
-def getNFSExports(pw):
-   print("\nFetching NFS Exports information...")
-   ptrn = input('Please enter path pattern (case sensitive): ')
-   exList = []
+def getNFSExports(pw,ptrn):
+   print("\nFetch NFS Exports information...")
    url = v1baseurl + "sharing/nfs/"
    timeo = 10
    payld = {'limit': 0}
    response = httpGet(url, pw, timeo, payld)
    if response.status_code == 200:
-      exList = response.json()
-      for item in exList:
-         match = re.search(ptrn, str(item['nfs_paths']))
-         if match:
-            pprint.pprint(item)
-      print()
+      return(response.json())
    else:
       non200(response.text)
+      return(None)
+
+def displayNFSExports(pw):
+   print()
+   ptrn = input('Please enter NFS path pattern (case sensitive): ')
+   fullList = []
+   foundList = []
+   fullList = getNFSExports(pw,ptrn)
+   for item in fullList:
+      match = re.search(ptrn, str(item['nfs_paths']))
+      if match:
+         foundList.append(item)
+   if len(foundList) > 0:
+      pprint.pprint(foundList)
+   else:
+      print("\tNo data matching", ptrn, "can be found.")
+   print()
+
+def modifyNFSExports(pw):
+   print()
+   ptrn = input('Please enter NFS path pattern (case sensitive): ')
+   fullList = []
+   foundDict= {}
+   fullList = getNFSExports(pw,ptrn)
+   for item in fullList:
+      match = re.search(ptrn, str(item['nfs_paths']))
+      if match:
+         foundDict[item['id']] = [ item['nfs_paths'], item['nfs_hosts'], item['nfs_ro'] ]
+   if len(foundDict) > 0:
+      print("Found the following entry/ies (ID, NFS path, NFS client(s) (if exists), & Read_Only?)...")
+      pprint.pprint(foundDict)
+   else:
+      print("\tNo data matching", ptrn, "can be found.")
+   print()
+   exID = input('Please enter the ID (1st column) of the NFS path you would like modify: ')
+   if exID.isdigit():
+      if int(exID) in foundDict.keys():
+         print("Current NFS client(s):", foundDict[int(exID)][1], "\n")
+         newNFSclients = input('Please enter new space-separated NFS client(s): ')
+         url = v1baseurl + "sharing/nfs/" + exID + "/"
+         timeo = 30
+         hdrs = {'Content-Type': 'application/json'}
+         data = json.dumps(
+            {
+               "nfs_hosts": newNFSclients
+            }
+         )
+         response = httpPut(url, pw, timeo, hdrs, data)
+         if response.status_code == 200:
+            print("\nSuccessfully modified list of NFS client(s).")
+            pprint.pprint(response.json())
+         else:
+            non200(response.text)
+            sys.exit(1)
+      else:
+         print("\tEntered ID cannot be matched with any ID in the provided results.  Exiting.\n")
+         sys.exit(1)
+   else:
+      print("\tThe ID should be all digit(s), i.e., 0123456789.  Exiting.\n")
+      sys.exit(1)
 
 def usage():
-   print(myprog, "[-e] [-c|d|l] [-i] [-s] [-u]")
+   print(myprog, "[-e|-m] [-c|-d|-l] [-i] [-s] [-u]")
    print("\nwhere:")
    print("    NFS")
-   print("\t-e   Exports")
+   print("\t-e   list Exports")
+   print("\t-m   Modify exports")
    print("    Snapshot")
    print("\t-c   Create snapshot")
    print("\t-d   Delete snapshot")
@@ -219,7 +283,7 @@ def usage():
    sys.exit(2)
 
 try:
-   opts, args = getopt.gnu_getopt(sys.argv[1:], "cdeilsu")
+   opts, args = getopt.gnu_getopt(sys.argv[1:], "cdeilmsu")
    if len(opts) < 1:
       usage()
 except getopt.GetoptError as err:
@@ -236,12 +300,14 @@ for o, a in opts:
       DSN = getDataset()
       delSnapshot(PW, DSN)
    elif o == "-e":
-      getNFSExports(PW)
+      displayNFSExports(PW)
    elif o == "-i":
       getSysInfo(PW)
    elif o == "-l":
       DSN = getDataset()
       listSnapshot(PW, DSN)
+   elif o == "-m":
+      modifyNFSExports(PW)
    elif o == "-s":
       getAllServices(PW)
    elif o == "-u":
