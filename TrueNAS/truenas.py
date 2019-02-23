@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-# This script, requires Python 3.6+, performs various tasks via the TrueNAS
+# This script, written in Python 3.6+, performs various tasks via the TrueNAS
 # API.  Additional development may be added to better format/utilize
 # data returned by API.  Due to the execution/wait time of certain API calls,
 # e.g., listing snapshots, is intentially
