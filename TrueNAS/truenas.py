@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 
 # This script, written in Python 3.6+, performs various tasks via the TrueNAS
-# API.  Additional development may be added to better format/utilize
-# data returned by API.  Due to the execution/wait time of certain API calls,
-# e.g., listing snapshots, is intentially
-# programmed not to be combined.
+# API INSECURELY.  Only HTTP protocol is available for the version(s) of
+# TrueNAS I have worked with so far unfortunately.  Additional development
+# may be added to better format/utilize data retrieved.  Due to the
+# execution/wait time of certain API calls, e.g., listing snapshots, is
+# intentially programmed not to be combined.
 
 
 import datetime, getopt, getpass
@@ -227,43 +228,54 @@ def modifyNFSExports(pw):
    ptrn = input('Please enter NFS path pattern (case sensitive): ')
    fullList = []
    foundDict= {}
+   goodIDs = []
+   badIDs = []
    fullList = getNFSExports(pw,ptrn)
    for item in fullList:
       match = re.search(ptrn, str(item['nfs_paths']))
       if match:
          foundDict[item['id']] = [ item['nfs_paths'], item['nfs_hosts'], item['nfs_ro'] ]
-   if len(foundDict) > 0:
+   if len(foundDict) < 1:
+      print("\tNo data matching", ptrn, "can be found.  Exiting.\n")
+      sys.exit(0)
+   else:
       print("Found the following entry/ies (ID, NFS path, NFS client(s) (if exists), & Read_Only?)...")
       pprint.pprint(foundDict)
-   else:
-      print("\tNo data matching", ptrn, "can be found.")
-   print()
-   exID = input('Please enter the ID (1st column) of the NFS path you would like modify: ')
-   if exID.isdigit():
-      if int(exID) in foundDict.keys():
-         print("Current NFS client(s):", foundDict[int(exID)][1], "\n")
-         newNFSclients = input('Please enter new space-separated NFS client(s): ')
-         url = v1baseurl + "sharing/nfs/" + exID + "/"
-         timeo = 30
-         hdrs = {'Content-Type': 'application/json'}
-         data = json.dumps(
-            {
-               "nfs_hosts": newNFSclients
-            }
-         )
-         response = httpPut(url, pw, timeo, hdrs, data)
-         if response.status_code == 200:
-            print("\nSuccessfully modified list of NFS client(s).")
-            pprint.pprint(response.json())
+      print("\nPlease enter the ID(s) (1st column) of the NFS path(s) you would like modify")
+      print("separated by space between multiple IDs for batch modification:")
+      myIDs = input()
+      exIDs = myIDs.split()
+      for exID in exIDs:
+         if exID.isdigit() and int(exID) in foundDict.keys():
+            goodIDs.append(exID)
          else:
-            non200(response.text)
-            sys.exit(1)
+            badIDs.append(exID)
+      if len(badIDs) > 0:
+         print("The following entered value(s) is/are invalid and is/are ignored:")
+         print("\t", str(badIDs))
+      if len(goodIDs) > 0:
+         print("\nProceeding with the following ID(s) is/are:", goodIDs)
+         newNFSclients = input('Please enter new space-separated NFS client(s): ')
+         for Id in goodIDs:
+            print("\nWorking on", Id, foundDict[int(Id)][0], "...")
+            url = v1baseurl + "sharing/nfs/" + Id + "/"
+            timeo = 30
+            hdrs = {'Content-Type': 'application/json'}
+            data = json.dumps(
+               {
+                  "nfs_hosts": newNFSclients
+               }
+            )
+            response = httpPut(url, pw, timeo, hdrs, data)
+            if response.status_code == 200:
+               print("\nSuccessfully modified list of NFS client(s) of", Id)
+               pprint.pprint(response.json())
+            else:
+               non200(response.text)
+         print("\nAll ID(s) processed.\n")
       else:
-         print("\tEntered ID cannot be matched with any ID in the provided results.  Exiting.\n")
+         print("None of the entered ID(s) is valid.  Exiting.\n")
          sys.exit(1)
-   else:
-      print("\tThe ID should be all digit(s), i.e., 0123456789.  Exiting.\n")
-      sys.exit(1)
 
 def usage():
    print(myprog, "[-e|-m] [-c|-d|-l] [-i] [-s] [-u]")
