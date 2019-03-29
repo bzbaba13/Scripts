@@ -55,7 +55,7 @@ def getVaultKey(verbose, mydir):
       with open(os.path.join(mydir, "vault_key"), "r") as f:
          vk = f.read().split(':')
    except IOError as err:
-      print "\NCritical: unable to read from 'vault_key' file to fetch password from vault."
+      print "\nCritical: unable to read from 'vault_key' file to fetch password from vault."
       print err
       sys.exit(1)
    return(vk)
