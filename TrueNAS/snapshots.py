@@ -139,7 +139,7 @@ def fetchNFSexclusion(mydir):
 
 def appendNFSpath(paths, inList):
    for item in inList:
-      if item not in paths: paths.append(item)
+      if len(item) > 0 and item not in paths: paths.append(item)
    return(paths)
 
 def cleanNFSpath(paths, exList):
