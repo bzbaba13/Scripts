@@ -1,16 +1,13 @@
 #!/usr/bin/env python3
 
 # This script, written in Python 3.6+, performs various tasks via the TrueNAS
-# API INSECURELY.  Only HTTP protocol is available for the version(s) of
-# TrueNAS I have worked with so far unfortunately.  Additional development
-# may be added to better format/utilize data retrieved.  Due to the
-# execution/wait time of certain API calls, e.g., listing snapshots, is
-# intentially programmed not to be combined.
+# API INSECURELY.  Only HTTP protocol is configured for the TrueNAS I have
+# worked with so far unfortunately.  Additional development may be added to
+# better format/utilize data retrieved.
 
 
-import datetime, getopt, getpass
-import re, pprint, sys
-import json
+import datetime, getopt, getpass, json
+import os.path, re, pprint, sys
 import requests
 
 myprog = sys.argv[0]
@@ -114,7 +111,7 @@ def getSysInfo(pw):
 
 def getDataset():
    for i in range(3):
-      ds = input('Please enter dataset, e.g., tank/fYP/DEV/fma_test: ')
+      ds = input('Please enter dataset, e.g., {dataset_path}: ')
       if i == 2 and len(ds) < 1:
          print("\nNo dataset entered aftet 3 times.  Aborting.\n")
          sys.exit(1)
@@ -172,7 +169,7 @@ def takeSnapshot(pw, dsName):
    ssName = '{}{}{}'.format(
                dsName.rsplit(sep='/',
                maxsplit=1)[1], '-',
-               '{:%Y-%m-%d-%H:%M:%S}'.format(d)
+               '{:%Y-%m-%d-%H:%M}'.format(d)
             )
    print("Name of snapshot:", ssName)
    url = v2baseurl + "zfs/snapshot"
@@ -277,13 +274,18 @@ def modifyNFSExports(pw):
          print("None of the entered ID(s) is valid.  Exiting.\n")
          sys.exit(1)
 
+def toomanyactions():
+   print("You have specified more than 1 of the exclusive actions.")
+   print("Please try again and select only 1 of the exclusive actions.")
+   usage()
+
 def usage():
-   print(myprog, "[-e|-m] [-c|-d|-l] [-i] [-s] [-u]")
+   print(os.path.basename(myprog), "[-e|-m] [-c|-d|-l] [-h] [-i] [-s] [-u]")
    print("\nwhere:")
-   print("    NFS")
+   print("    NFS (exclusive action)")
    print("\t-e   list Exports")
    print("\t-m   Modify exports")
-   print("    Snapshot")
+   print("    Snapshot (exclusive action)")
    print("\t-c   Create snapshot")
    print("\t-d   Delete snapshot")
    print("\t-l   List snapshot(s)")
@@ -291,38 +293,96 @@ def usage():
    print("\t-i   system Information")
    print("\t-s   fetch all Services")
    print("\t-u   fetch all Users")
+   print("    -h  usage (this output)")
    print()
    sys.exit(2)
 
-try:
-   opts, args = getopt.gnu_getopt(sys.argv[1:], "cdeilmsu")
-   if len(opts) < 1:
+def main():
+   action = None
+   verbose = False
+   try:
+      opts, args = getopt.gnu_getopt(sys.argv[1:], "cdehilmsu")
+      if len(opts) < 1:
+         usage()
+   except getopt.GetoptError as err:
+      print(str(err))
       usage()
-except getopt.GetoptError as err:
-   print(str(err))
-   usage()
-   sys.exit(2)
-PW = getPW()
-checkPW(PW)
-for o, a in opts:
-   if o == "-c":
-      DSN = getDataset()
-      takeSnapshot(PW, DSN)
-   elif o == "-d":
-      DSN = getDataset()
-      delSnapshot(PW, DSN)
-   elif o == "-e":
-      displayNFSExports(PW)
-   elif o == "-i":
-      getSysInfo(PW)
-   elif o == "-l":
-      DSN = getDataset()
-      listSnapshot(PW, DSN)
-   elif o == "-m":
-      modifyNFSExports(PW)
-   elif o == "-s":
-      getAllServices(PW)
-   elif o == "-u":
-      getAllUsers(PW)
+   for o, a in opts:
+      if o == "-h": usage()
+      elif o == "-c":
+         if action == None:
+            action = 'c-ss'
+         else:
+            toomanyactions()
+      elif o == "-d":
+         if action == None:
+            action = 'd-ss'
+         else:
+            toomanyactions()
+      elif o == "-l":
+         if action == None:
+            action = 'l-ss'
+         else:
+            toomanyactions()
+      elif o == "-e":
+         if action == None:
+            action = 'l-exports'
+         else:
+            toomanyactions()
+      elif o == "-i":
+         if action == None:
+            action = 'g-sysinfo'
+         else:
+            toomanyactions()
+      elif o == "-m":
+         if action == None:
+            action = 'm-exports'
+         else:
+            toomanyactions()
+      elif o == "-s":
+         if action == None:
+            action = 'g-services'
+         else:
+            toomanyactions()
+      elif o == "-u":
+         if action == None:
+            action = 'g-allusers'
+         else:
+            toomanyactions()
+      else:
+         assert False, "unhandled option"
+         usage()
+   PW = getPW()
+   checkPW(PW)
+   if verbose: print("Verbose output selected...")
+   if action == None:
+      if verbose:
+         print("No action was specified.")
+         usage()
    else:
-      usage()
+      if action == 'c-ss':
+         DSN = getDataset()
+         takeSnapshot(PW, DSN)
+      elif action == 'd-ss':
+         DSN = getDataset()
+         delSnapshot(PW, DSN)
+      elif action == 'l-ss':
+         DSN = getDataset()
+         listSnapshot(PW, DSN)
+      elif action == 'l-exports':
+         displayNFSExports(PW)
+      elif action == 'm-exports':
+         modifyNFSExports(PW)
+      elif action == 'g-sysinfo':
+         getSysInfo(PW)
+      elif action == 'g-services':
+         getAllServices(PW)
+      elif action == 'g-allusers':
+         getAllUsers(PW)
+      else:
+         print("Invalid action specified.")
+         sys.exit(1)
+
+
+if __name__ == "__main__":
+   main()
