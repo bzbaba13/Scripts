@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
 
+# == Synopsis
+#
 # This script, written in Python 3.6+, performs various tasks via the TrueNAS
 # API INSECURELY.  Only HTTP protocol is configured for the TrueNAS I have
 # worked with so far unfortunately.  Additional development may be added to
 # better format/utilize data retrieved.
-
+#
 
 import datetime, getopt, getpass, json
 import os.path, re, pprint, sys
@@ -111,7 +113,7 @@ def getSysInfo(pw):
 
 def getDataset():
    for i in range(3):
-      ds = input('Please enter dataset, e.g., {dataset_path}: ')
+      ds = input('Please enter dataset, e.g., {path_of_dataset}: ')
       if i == 2 and len(ds) < 1:
          print("\nNo dataset entered aftet 3 times.  Aborting.\n")
          sys.exit(1)

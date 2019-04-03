@@ -1,9 +1,11 @@
 #!/usr/bin/env python2
 
-# This script, written in Python 2.7, performs snapshot-related tasks via the
+# == Synopsis
+#
+# This script, written in Python 2.6+, performs snapshot-related tasks via the
 # TrueNAS API INSECURELY.  Only HTTP protocol is available for the version(s)
 # of TrueNAS I have worked with so far unfortunately.
-
+#
 
 import datetime, getopt, json
 import os.path, re, subprocess, sys
@@ -281,7 +283,7 @@ def usage():
    print "\nwhere action is one of:"
    print "\t-c    Create snapshot"
    print "\t-d #  Delete snapshot(s) over the retention of # snapshot(s)"
-   print "\t-l    List snapshot(s)"
+   print "\t-l    List snapshot(s) (verbose output)"
    print "   -h  Usage (this output)"
    print "   -v  Verbose output"
    print
@@ -348,7 +350,6 @@ def main():
       else:
          print "Invalid action specified."
          sys.exit(1)
-
 
 if __name__ == "__main__":
    main()
