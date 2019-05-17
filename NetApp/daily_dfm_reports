@@ -1,8 +1,5 @@
 #!/bin/bash
 
-#
-# Author: Friendly half-blind Systems Administrator
-#
 
 PATH=/bin:/usr/bin
 
@@ -145,13 +142,31 @@ dfm report view -s 'Used (%)' -P 1d storage-systems-capacity 2>&1 | \
   cut -b 11- >> $tmpfile
 sed -i '/Storage\ System\ \ \ /{
   s/Used\ \ \ \ \ /Used\ (TB)/
-  s/Total\ \ \ \ \ /Total\ (TB)/}' $tmpfile
+  s/Total\ \ \ \ \ /All\'d\ (TB)/}' $tmpfile
 awk '
    ($1 !~ /netapp/ && $1 !~ /[1-9]/) { print $0 }
    $1 ~ /netapp/ { printf("%-33s %12.3f %12.3f %8.1f\n", $1, $2/1024**3, $3/1024**3, $NF) } 
 END { 
   printf("%-33s %12.3f %12.3f %8.1f\n", "Total", $1/1024**3, $2/1024**3, $NF) 
 }' $tmpfile > $outfile
+rm -f $tmpfile
+
+tmpfile=/tmp/aggregate-space-summary.txt
+outfile="$rpt_path"/aggregate-space-summary.txt
+echo 'Aggregate Capacity Report (by Used (%))' > $tmpfile
+dt_stamp=`date`
+echo -e "Generated on ${dt_stamp}\n" >> $tmpfile
+dfm report view -s 'Used (%)' aggregate-space-summary 2>&1 |
+  sed '/Controller\/Cluster/ {
+    s/Used\ \ \ \ \ /Used\ (TB)/
+    s/Total\ \ \ \ \ /Total\ (TB)/ }
+    s/Totals\ \ \ \ \ \ \ \ \ \ /          Totals/ ' | cut -b 11- >> $tmpfile
+awk '
+  ( $2 !~ /netapp/ && $1 !~ /Totals/ ) { print $0 }
+  ( $2 ~ /netapp/ ) { printf("%-16s %-34s %9.3f  %10.3f %8.1f %12.3f   %10.1f                %2.1f       %s\n",
+    $1, $2, $3/1024**3, $4/1024**3, $5, $6/1024**3, $7, $8, $9) }
+  ( $1 ~ /Totals/ ) { printf("%-50s %10.3f  %10.3f %8.1f %12.3f   %10.1f\n",
+    $1, $2/1024**3, $3/1024**3, $4, $5/1024**3, $6) } ' $tmpfile > $outfile
 rm -f $tmpfile
 
 # reports for StoraGenie

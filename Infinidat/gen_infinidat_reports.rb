@@ -1,4 +1,4 @@
-#!/usr/bin/env ruby -w
+#!/home/t/ruby-2.3.5-1-1/bin/ruby -w
 
 # == Synopsis
 #
@@ -23,7 +23,9 @@ require 'json'
 @pri_data_h = Hash.new
 @sec_data_h = Hash.new
 @data_h = Hash.new
-@site_data = { "st1" => "Site1", "ev1" => "Site2" }
+@site_data = { "set1" => "Location 1",
+               "set2" => "Location 2",
+               "set3" => "Location 3" }
 
 
 def show_usage
@@ -209,7 +211,13 @@ def pools(site)
    if not pools_data.empty?
       pools_data.each { |r|
          r.each_pair { |k,v|
-            rpt_body.push( sprintf( "%38s : %-s", k, v ) )
+            if ( k == 'physical_capacity' ||
+                 k == 'allocated_physical_space' ||
+                 k == 'free_physical_space' )
+               rpt_body.push( sprintf( "%38s : %-s (%.3f TB)", k, v, v/1024.0**4 ) )
+            else
+               rpt_body.push( sprintf( "%38s : %-s", k, v ) )
+            end
          }
          rpt_body.push("\n")
       }
