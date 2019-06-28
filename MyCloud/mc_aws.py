@@ -32,39 +32,21 @@ def GetAllEC2Instances():
       print(instance.id, instance.tags, instance.state)
 
 def GetAllStoppedEC2Instances():
-   print("Looking for all stopped/stopping instances...")
-   IdList = []
    ec2 = boto3.resource('ec2')
    instances = ec2.instances.filter(
       Filters=[{'Name': 'instance-state-name', 'Values': ['stopped', 'stopping']}]
    )
-   for inst in instances:
-      IdList.append(inst.instance_id)
-      print("ID:", inst.instance_id, 
-            "\tType:", inst.instance_type, 
-            "\tState:", inst.state)
-      print("    Tags:", inst.tags)
-      print("\tPrivate DNS name:", inst.private_dns_name)
-      print("\t      IP address:", inst.private_ip_address)
-      if len(inst.public_dns_name) > 0:
-         print("\t Public DNS name:", inst.public_dns_name)
-      else:
-         print("\t Public DNS name: None")
-      print("\t      IP address:", inst.public_ip_address)
-      print()
-   if len(IdList) == 0:
-      print("\tNo instances with state of 'stopped'/'stopping' found.\n")
-   else:
-      print()
-   return(IdList)
+   return(instances)
 
 def GetAllRunningEC2Instances():
-   print("Looking for all running instances...")
-   IdList = []
    ec2 = boto3.resource('ec2')
    instances = ec2.instances.filter(
       Filters=[{'Name': 'instance-state-name', 'Values': ['running']}]
    )
+   return(instances)
+
+def PrintAllEC2Instances(instances,mystate):
+   IdList = []
    for inst in instances:
       IdList.append(inst.instance_id)
       print("ID:", inst.instance_id, 
@@ -80,10 +62,9 @@ def GetAllRunningEC2Instances():
       print("\t      IP address:", inst.public_ip_address)
       print()
    if len(IdList) == 0:
-      print("\tNo instances with state of 'running' found.\n")
+      print("\tNo instances with state of", mystate, "found.\n")
    else:
       print()
-   return(IdList)
 
 def StartAllStoppedEC2Instances(myids):
    ec2 = boto3.resource('ec2')
@@ -148,5 +129,7 @@ def GetIAMUser():
 
 # for testing purposes
 if __name__ == "__main__":
-   GetAllStoppedEC2Instances()
-   GetAllRunningEC2Instances()
+   print("Looking for all stopped/stopping instances...")
+   PrintAllEC2Instances(GetAllStoppedEC2Instances(),'stopped/stopping')
+   print("Looking for all running instances...")
+   PrintAllEC2Instances(GetAllRunningEC2Instances(),'running')
