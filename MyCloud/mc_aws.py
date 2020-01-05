@@ -1,13 +1,14 @@
 # This is the AWS portion of the MyCloud application.
-# Python 3.6+, AWS CLI, and boto3 are required for execution.
+# Python 3.6+ & boto3 are required for execution.
 
 import boto3
-import pprint, json
+import pprint, json, sys
 
 verbose = False
+my_region = None
 
-def GetAllEC2InstanceStatus():
-   client = boto3.client('ec2')
+def GetAllEC2InstanceStatus(my_region):
+   client = boto3.client('ec2', region_name=my_region)
    response = client.describe_instance_status(
       IncludeAllInstances=True
    )
@@ -25,21 +26,21 @@ def GetAllEC2InstanceStatus():
    else:
       print('Failed to retrieve EC2 data with code: ', str(statuscode))
 
-def GetAllEC2Instances():
-   ec2 = boto3.resource('ec2')
+def GetAllEC2Instances(my_region):
+   ec2 = boto3.resource('ec2', region_name=my_region)
    instances = ec2.instances.all()
    for instance in instances:
       print(instance.id, instance.tags, instance.state)
 
-def GetAllStoppedEC2Instances():
-   ec2 = boto3.resource('ec2')
+def GetAllStoppedEC2Instances(my_region):
+   ec2 = boto3.resource('ec2', region_name=my_region)
    instances = ec2.instances.filter(
       Filters=[{'Name': 'instance-state-name', 'Values': ['stopped', 'stopping']}]
    )
    return(instances)
 
-def GetAllRunningEC2Instances():
-   ec2 = boto3.resource('ec2')
+def GetAllRunningEC2Instances(my_region):
+   ec2 = boto3.resource('ec2', region_name=my_region)
    instances = ec2.instances.filter(
       Filters=[{'Name': 'instance-state-name', 'Values': ['running']}]
    )
@@ -129,7 +130,12 @@ def GetIAMUser():
 
 # for testing purposes
 if __name__ == "__main__":
-   print("Looking for all stopped/stopping instances...")
-   PrintAllEC2Instances(GetAllStoppedEC2Instances(),'stopped/stopping')
-   print("Looking for all running instances...")
-   PrintAllEC2Instances(GetAllRunningEC2Instances(),'running')
+   my_region = input('Please provide the region: ')
+   if len(my_region) > 0:
+      print("Looking for all stopped/stopping instances...")
+      PrintAllEC2Instances(GetAllStoppedEC2Instances(my_region),'stopped/stopping')
+      print("Looking for all running instances...")
+      PrintAllEC2Instances(GetAllRunningEC2Instances(my_region),'running')
+   else:
+      print("Please specify AWS region.")
+      sys.exit()
