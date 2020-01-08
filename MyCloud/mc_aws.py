@@ -50,10 +50,8 @@ def PrintAllEC2Instances(instances,mystate):
    IdList = []
    for inst in instances:
       IdList.append(inst.instance_id)
-      print("ID:", inst.instance_id, 
-            "\tType:", inst.instance_type, 
-            "\tState:", inst.state)
-      print("    Tags:", inst.tags)
+      print("ID:", inst.instance_id, "\tType:", inst.instance_type, "\tState:", inst.state)
+      print("Tags:", inst.tags)
       print("\tPrivate DNS name:", inst.private_dns_name)
       print("\t      IP address:", inst.private_ip_address)
       if len(inst.public_dns_name) > 0:
