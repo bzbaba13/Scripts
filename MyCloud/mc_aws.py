@@ -125,15 +125,27 @@ def GetIAMUser():
    else:
       print('Failed to retrieve IAM User data with code: ', str(statuscode))
 
+def VerifyRegion(my_region):
+   client = boto3.client('ec2', region_name='us-east-1')
+   try:
+      response = client.describe_regions(
+         RegionNames=[
+            my_region,
+         ]
+      )
+   except Exception:
+      print("Specified region is invalid.")
+      sys.exit(1)
 
 # for testing purposes
 if __name__ == "__main__":
    my_region = input('Please provide the region: ')
    if len(my_region) > 0:
+      VerifyRegion(my_region)
       print("Looking for all stopped/stopping instances...")
       PrintAllEC2Instances(GetAllStoppedEC2Instances(my_region),'stopped/stopping')
       print("Looking for all running instances...")
       PrintAllEC2Instances(GetAllRunningEC2Instances(my_region),'running')
    else:
-      print("Please specify AWS region.")
-      sys.exit()
+      print("No AWS region specified.")
+      sys.exit(1)
