@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
 
 import re, sys, getopt
+import glob
 
 
 myprog = sys.argv[0]
 debug = False
+myfile = None
 infile = None
 pattern = None
 no_case = None
@@ -27,7 +29,7 @@ try:
       sys.exit(2)
    else:
       pattern = args[0]
-      infile = args[1]
+      myfile = glob.glob(args[1])
 except getopt.GetoptError as err:
    print(str(err))
    usage()
@@ -47,22 +49,25 @@ for o, a in opts:
 
 def main():
    if debug == True:
-      print("Input file:", infile, " Pattern:", pattern)
+      print("File:", myfile, " Pattern:", pattern)
    
-   with open(infile, 'r') as f:
-      for line in f:
-         if no_case == True:
-            if reverse_match == True:
-               match = not re.search(pattern, line, flags=re.I)
+   for infile in myfile:
+      print("========", infile, "========")
+      with open(infile, 'r') as f:
+         for line in f:
+            if no_case == True:
+               if reverse_match == True:
+                  match = not re.search(pattern, line, flags=re.I)
+               else:
+                  match = re.search(pattern, line, flags=re.I)
             else:
-               match = re.search(pattern, line, flags=re.I)
-         else:
-            if reverse_match == True:
-               match = not re.search(pattern, line)
-            else:
-               match = re.search(pattern, line)
-         if match:
-            print(line, end='')
+               if reverse_match == True:
+                  match = not re.search(pattern, line)
+               else:
+                  match = re.search(pattern, line)
+            if match:
+               print(line, end='')
+      print("\n")
 
 
 if __name__ == "__main__":
