@@ -50,7 +50,8 @@ def PrintAllEC2Instances(instances,mystate):
    IdList = []
    for inst in instances:
       IdList.append(inst.instance_id)
-      print("ID:", inst.instance_id, "\tType:", inst.instance_type, "\tState:", inst.state)
+      print("ID:", inst.instance_id, "    Type:", inst.instance_type, "    AZ:", inst.placement['AvailabilityZone'])
+      print("State:", inst.state)
       print("Tags:", inst.tags)
       print("\tPrivate DNS name:", inst.private_dns_name)
       print("\t      IP address:", inst.private_ip_address)
@@ -133,8 +134,8 @@ def VerifyRegion(my_region):
             my_region,
          ]
       )
-   except Exception:
-      print("Specified region is invalid.")
+   except Exception as err:
+      print(err)
       sys.exit(1)
 
 # for testing purposes
