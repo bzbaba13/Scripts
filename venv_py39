@@ -1,0 +1,9 @@
+#!/usr/bin/env zsh
+
+echo "Setting python to version 3.9, you may be prompted for password..."
+sudo port select --set python python39
+sudo port select --set python3 python39
+
+echo "Setting pip to version 3.9..."
+sudo port select --set pip pip39
+sudo port select --set pip3 pip39
