@@ -1,9 +1,16 @@
 #!/usr/bin/env zsh
 
-echo "Setting python to version 3.8, you may be prompted for password..."
+echo "Switching python[3] to python38..."
 sudo port select --set python python38
 sudo port select --set python3 python38
 
-echo "Setting pip to version 3.8..."
+echo "Switching pip[3] to pip38..."
 sudo port select --set pip pip38
 sudo port select --set pip3 pip38
+
+vir_dir=$HOME/venv_python38
+if [ -d $vir_dir ]
+then
+   echo "Upgrading ${vir_dir} with --copies option..."
+   python -m venv --upgrade --copies $vir_dir
+fi
