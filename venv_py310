@@ -1,0 +1,16 @@
+#!/usr/bin/env zsh
+
+echo "Switching python[3] to python310..."
+sudo port select --set python python310
+sudo port select --set python3 python310
+
+echo "Switching pip[3] to pip310..."
+sudo port select --set pip pip310
+sudo port select --set pip3 pip310
+
+vir_dir=$HOME/venv_python310
+if [ -d $vir_dir ]
+then
+   echo "Upgrading ${vir_dir} with --copies venv_python310..."
+   python -m venv --upgrade --upgrade-deps --copies $vir_dir
+fi
