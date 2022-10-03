@@ -8,6 +8,9 @@ echo "Switching pip[3] to pip39..."
 sudo port select --set pip pip39
 sudo port select --set pip3 pip39
 
+echo "Activating other py39-related packages..."
+sudo port select --set pygments py39-pygments
+
 vir_dir=$HOME/venv_python39
 if [ -d $vir_dir ]
 then

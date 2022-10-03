@@ -8,6 +8,9 @@ echo "Switching pip[3] to pip310..."
 sudo port select --set pip pip310
 sudo port select --set pip3 pip310
 
+echo "Activating other py310-related package(s)..."
+sudo port select --set pygments py310-pygments
+
 vir_dir=$HOME/venv_python310
 if [ -d $vir_dir ]
 then
