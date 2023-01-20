@@ -10,6 +10,7 @@ sudo port select --set pip3 pip310
 
 echo "Activating other py310-related package(s)..."
 sudo port select --set pygments py310-pygments
+sudo port select --set cython cython310
 
 vir_dir=$HOME/venv_python310
 if [ -d $vir_dir ]
