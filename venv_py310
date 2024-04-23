@@ -12,9 +12,9 @@ echo "Activating other py310-related package(s)..."
 sudo port select --set pygments py310-pygments
 sudo port select --set cython cython310
 
-vir_dir=$HOME/venv_python310
+vir_dir=$HOME/venv_py310_ans_aws/
 if [ -d $vir_dir ]
 then
-   echo "Upgrading ${vir_dir} with --copies venv_python310..."
+   echo "Upgrading ${vir_dir} with --copies..."
    python -m venv --upgrade --upgrade-deps --copies $vir_dir
 fi

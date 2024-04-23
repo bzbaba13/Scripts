@@ -1,0 +1,20 @@
+#!/usr/bin/env zsh
+
+echo "Switching python[3] to python312..."
+sudo port select --set python python312
+sudo port select --set python3 python312
+
+echo "Switching pip[3] to pip312..."
+sudo port select --set pip pip312
+sudo port select --set pip3 pip312
+
+echo "Activating other py312-related package(s)..."
+sudo port select --set pygments py312-pygments
+#sudo port select --set cython cython312
+
+vir_dir=$HOME/venv_py312_ans_aws
+if [ -d $vir_dir ]
+then
+   echo "Upgrading ${vir_dir} with --copies..."
+   python -m venv --upgrade --upgrade-deps --copies $vir_dir
+fi
